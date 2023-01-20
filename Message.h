@@ -2,8 +2,8 @@
 // Created by thomas on 05.01.23.
 //
 
-#ifndef LIBMAVLINK_DYNAMICMESSAGE_H
-#define LIBMAVLINK_DYNAMICMESSAGE_H
+#ifndef MAV_DYNAMICMESSAGE_H
+#define MAV_DYNAMICMESSAGE_H
 
 #include <memory>
 #include <utility>
@@ -11,7 +11,7 @@
 #include "MessageDefinition.h"
 #include "utils.h"
 
-namespace libmavlink {
+namespace mav {
 
     // forward declared MessageSet
     class MessageSet;
@@ -283,6 +283,6 @@ namespace libmavlink {
     };
 
 
-#endif //LIBMAVLINK_DYNAMICMESSAGE_H
+#endif //MAV_DYNAMICMESSAGE_H
 
 } // namespace libmavlink

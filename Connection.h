@@ -2,10 +2,10 @@
 // Created by thomas on 13.01.23.
 //
 
-#ifndef LIBMAVLINK_CONNECTION_H
-#define LIBMAVLINK_CONNECTION_H
+#ifndef MAV_CONNECTION_H
+#define MAV_CONNECTION_H
 
-namespace libmavlink {
+namespace mav {
 
     class TimeoutException : public std::runtime_error {
     public:
@@ -28,6 +28,7 @@ namespace libmavlink {
         std::function<void(const Message &message)> _send_to_network_function;
         std::function<void(void)> _on_connect_callback;
         std::function<void(void)> _on_disconnect_callback;
+        std::function<void(const Message &message)> _message_callback;
 
     public:
         Connection(const MessageSet &message_set, Identifier partner_id) :
@@ -44,6 +45,10 @@ namespace libmavlink {
             // in case we received a heartbeat, update last heartbeat time, to keep the connection alive.
             if (message.header().msgId() == _heartbeat_message_id) {
                 _last_heartbeat_ms = millis();
+            }
+            std::cout << message.type()->name() << std::endl;
+            if (_message_callback) {
+                _message_callback(message);
             }
         }
 
@@ -68,9 +73,14 @@ namespace libmavlink {
             forceSend(message);
         }
 
+        template<typename T>
+        void setMessageCallback(T on_message) {
+            _message_callback = on_message;
+        }
+
     };
 
 };
 
 
-#endif //LIBMAVLINK_CONNECTION_H
+#endif //MAV_CONNECTION_H

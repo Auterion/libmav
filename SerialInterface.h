@@ -10,7 +10,7 @@
 #include <fcntl.h>
 #include <termios.h>
 
-namespace libmavlink {
+namespace mav {
     class Serial : public NetworkInterface {
     private:
         int _fd = -1;

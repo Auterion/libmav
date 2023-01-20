@@ -2,16 +2,18 @@
 // Created by thomas on 13.01.23.
 //
 
-#ifndef LIBMAVLINK_NETWORK_H
-#define LIBMAVLINK_NETWORK_H
+#ifndef MAV_NETWORK_H
+#define MAV_NETWORK_H
 
 #include <list>
 #include <thread>
 #include <array>
+#include <thread>
+#include <atomic>
 #include "Connection.h"
 #include "utils.h"
 
-namespace libmavlink {
+namespace mav {
 
 
     class NetworkError : public std::runtime_error {
@@ -24,29 +26,7 @@ namespace libmavlink {
     class NetworkInterface {
     public:
         virtual void send(const uint8_t* data, uint32_t size) const = 0;
-        virtual void receive(uint8_t* destingation, uint32_t size) const = 0;
-    };
-
-    class TCP : public NetworkInterface {
-    public:
-        void send(const uint8_t* data, uint32_t size) const {
-
-        };
-
-        void receive(uint8_t* data, uint32_t size) const {
-
-        };
-    };
-
-    class UDP : public NetworkInterface {
-    public:
-        void send(const uint8_t* data, uint32_t size) const {
-
-        };
-
-        void receive(uint8_t* data, uint32_t size) const {
-
-        };
+        virtual void receive(uint8_t* destination, uint32_t size) const = 0;
     };
 
 
@@ -79,20 +59,23 @@ namespace libmavlink {
                 bool message_is_signed = header.incompatFlags() & 0x01;
                 int wire_length = MessageDefinition::HEADER_SIZE + header.len() + MessageDefinition::CHECKSUM_SIZE +
                                   (message_is_signed ? MessageDefinition::SIGNATURE_SIZE : 0);
-                _interface.receive(wire_length - MessageDefinition::HEADER_SIZE);
+                _interface.receive(backing_memory->data() + MessageDefinition::HEADER_SIZE,
+                                   wire_length - MessageDefinition::HEADER_SIZE);
                 int crc_offset = MessageDefinition::HEADER_SIZE + header.len();
 
                 CRC crc;
                 crc.accumulate(backing_memory->begin() + 1, backing_memory->begin() + crc_offset);
                 auto crc_received = deserialize<uint16_t>(backing_memory->data() + crc_offset);
                 if (crc_received != crc.crc16()) {
+                    std::cout << "crc" << std::endl;
                     // crc error. Try to re-sync.
-                    continue;
+                   // continue;
                 }
 
                 auto definition = _message_set.getMessageDefinition(header.msgId());
 
                 if (!definition) {
+                    std::cout << "no def" << std::endl;
                     // we do not know this message, do nothing and continue
                     continue;
                 }
@@ -105,7 +88,10 @@ namespace libmavlink {
 
     class NetworkRuntime {
     private:
-        std::unique_ptr<NetworkInterface> _interface;
+        std::atomic_bool _should_terminate{false};
+        std::thread _receive_thread;
+
+        NetworkInterface& _interface;
         MessageSet& _message_set;
         StreamParser _parser;
         Identifier _own_id;
@@ -115,7 +101,7 @@ namespace libmavlink {
 
         void _sendMessage(const Message &message) {
             int wire_length = message.finalize(_seq++, _own_id);
-            _interface->send(message.data(), wire_length);
+            _interface.send(message.data(), wire_length);
         }
 
         void _heartbeat_thread() {
@@ -123,18 +109,31 @@ namespace libmavlink {
         }
 
         void _receive_thread_function() {
-            auto message = _parser.next();
-            for (auto& connection : _connections) {
-                connection.consumeMessageFromNetwork(message);
+            while (!_should_terminate.load()) {
+                try {
+                    auto message = _parser.next();
+                    for (auto& connection : _connections) {
+                        connection.consumeMessageFromNetwork(message);
+                    }
+                } catch (NetworkError &e) {
+                    std::cerr << "Network failed " << e.what() << std::endl;
+                    _should_terminate.store(true);
+                }
             }
         }
 
 
     public:
-        template <typename InterfaceType, typename ...Args>
-        NetworkRuntime(const Identifier &own_id, MessageSet &message_set, Args ...args) :
+        NetworkRuntime(const Identifier &own_id, MessageSet &message_set, NetworkInterface &interface) :
                 _own_id(own_id), _message_set(message_set),
-                _interface(std::make_unique<InterfaceType>(args...)), _parser(_message_set, *_interface) {}
+                _interface(interface), _parser(_message_set, _interface) {
+
+            _receive_thread = std::thread{
+                [this]() {
+                    _receive_thread_function();
+                }
+            };
+        }
 
         void addConnection(Connection &connection) {
             connection.template setSendMessageToNetworkFunc([this](const Message &message){
@@ -142,10 +141,21 @@ namespace libmavlink {
             });
             _connections.push_back(connection);
         }
+
+        void stop() {
+            _should_terminate.store(true);
+            if (_receive_thread.joinable()) {
+                _receive_thread.join();
+            }
+        }
+
+        ~NetworkRuntime() {
+            stop();
+        }
     };
 }
 
 
 
 
-#endif //LIBMAVLINK_NETWORK_H
+#endif //MAV_NETWORK_H

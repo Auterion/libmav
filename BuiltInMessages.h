@@ -2,12 +2,12 @@
 // Created by thomas on 13.01.23.
 //
 
-#ifndef LIBMAVLINK_BUILTINMESSAGES_H
-#define LIBMAVLINK_BUILTINMESSAGES_H
+#ifndef MAV_BUILTINMESSAGES_H
+#define MAV_BUILTINMESSAGES_H
 
 #include <sstream>
 
-namespace libmavlink {
+namespace mav {
     constexpr char MSG_HEARTBEAT[] =
             "    <message id=\"0\" name=\"HEARTBEAT\">\n"
             "      <description>The heartbeat message shows that a system or component is present and responding. The type and autopilot fields (along with the message component id), allow the receiving system to treat further messages from this system appropriately (e.g. by laying out the user interface based on the autopilot). This microservice is documented at https://mavlink.io/en/services/heartbeat.html</description>\n"
@@ -33,4 +33,4 @@ namespace libmavlink {
 };
 
 
-#endif //LIBMAVLINK_BUILTINMESSAGES_H
+#endif //MAV_BUILTINMESSAGES_H

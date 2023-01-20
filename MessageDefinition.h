@@ -2,8 +2,8 @@
 // Created by thomas on 10.01.23.
 //
 
-#ifndef LIBMAVLINK_MESSAGEDEFINITION_H
-#define LIBMAVLINK_MESSAGEDEFINITION_H
+#ifndef MAV_MESSAGEDEFINITION_H
+#define MAV_MESSAGEDEFINITION_H
 
 #include <map>
 #include <vector>
@@ -12,7 +12,7 @@
 #include "utils.h"
 
 
-namespace libmavlink {
+namespace mav {
 
     class Identifier {
     public:
@@ -242,7 +242,7 @@ namespace libmavlink {
                              });
 
             int offset = MessageDefinition::HEADER_SIZE;
-            libmavlink::CRC crc_extra;
+            CRC crc_extra;
             crc_extra.accumulate(_result._name);
             crc_extra.accumulate(" ");
 
@@ -273,4 +273,4 @@ namespace libmavlink {
     };
 }
 
-#endif //LIBMAVLINK_MESSAGEDEFINITION_H
+#endif //MAV_MESSAGEDEFINITION_H

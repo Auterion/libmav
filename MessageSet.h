@@ -2,8 +2,8 @@
 // Created by thomas on 10.01.23.
 //
 
-#ifndef LIBMAVLINK_MESSAGESET_H
-#define LIBMAVLINK_MESSAGESET_H
+#ifndef MAV_MESSAGESET_H
+#define MAV_MESSAGESET_H
 
 #include <utility>
 #include <filesystem>
@@ -13,7 +13,7 @@
 
 #include "tinyxml2/tinyxml2.h"
 
-namespace libmavlink {
+namespace mav {
 
     class XMLParser {
     private:
@@ -31,7 +31,7 @@ namespace libmavlink {
             return prefix == full.substr(0, prefix.size());
         }
 
-        static libmavlink::FieldType _parseFieldType(const std::string &field_type_string) {
+        static FieldType _parseFieldType(const std::string &field_type_string) {
             int size = 1;
             size_t array_notation_start_idx = field_type_string.find('[');
             std::string base_type_substr;
@@ -42,29 +42,29 @@ namespace libmavlink {
             }
 
             if (_isPrefix("uint8_t", field_type_string)) {
-                return {libmavlink::FieldType::BaseType::UINT8, size};
+                return {FieldType::BaseType::UINT8, size};
             } else if (_isPrefix("uint16_t", field_type_string)) {
-                return {libmavlink::FieldType::BaseType::UINT16, size};
+                return {FieldType::BaseType::UINT16, size};
             } else if (_isPrefix("uint32_t", field_type_string)) {
-                return {libmavlink::FieldType::BaseType::UINT32, size};
+                return {FieldType::BaseType::UINT32, size};
             } else if (_isPrefix("uint64_t", field_type_string)) {
-                return {libmavlink::FieldType::BaseType::UINT64, size};
+                return {FieldType::BaseType::UINT64, size};
             } else if (_isPrefix("int8_t", field_type_string)) {
-                return {libmavlink::FieldType::BaseType::INT8, size};
+                return {FieldType::BaseType::INT8, size};
             } else if (_isPrefix("int16_t", field_type_string)) {
-                return {libmavlink::FieldType::BaseType::INT16, size};
+                return {FieldType::BaseType::INT16, size};
             } else if (_isPrefix("int32_t", field_type_string)) {
-                return {libmavlink::FieldType::BaseType::INT32, size};
+                return {FieldType::BaseType::INT32, size};
             } else if (_isPrefix("int64_t", field_type_string)) {
-                return {libmavlink::FieldType::BaseType::INT64, size};
+                return {FieldType::BaseType::INT64, size};
             } else if (_isPrefix("char", field_type_string)) {
-                return {libmavlink::FieldType::BaseType::CHAR, size};
+                return {FieldType::BaseType::CHAR, size};
             } else if (_isPrefix("float", field_type_string)) {
-                return {libmavlink::FieldType::BaseType::FLOAT, size};
+                return {FieldType::BaseType::FLOAT, size};
             } else if (_isPrefix("double", field_type_string)) {
-                return {libmavlink::FieldType::BaseType::DOUBLE, size};
+                return {FieldType::BaseType::DOUBLE, size};
             }
-            return {libmavlink::FieldType::BaseType::UNKNOWN, 0};
+            return {FieldType::BaseType::UNKNOWN, 0};
         }
 
     public:
@@ -106,7 +106,7 @@ namespace libmavlink {
                  message = message->NextSiblingElement()) {
 
                 const std::string message_name =  message->Attribute("name");
-                libmavlink::MessageDefinitionBuilder builder{
+                MessageDefinitionBuilder builder{
                         message_name,
                         std::stoi(message->Attribute("id"))
                 };
@@ -209,4 +209,4 @@ namespace libmavlink {
 
 
 
-#endif //LIBMAVLINK_MESSAGESET_H
+#endif //MAV_MESSAGESET_H

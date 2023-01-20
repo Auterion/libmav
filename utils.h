@@ -4,10 +4,10 @@
 
 #include <sstream>
 
-#ifndef LIBMAVLINK_UTILS_H
-#define LIBMAVLINK_UTILS_H
+#ifndef MAV_UTILS_H
+#define MAV_UTILS_H
 
-namespace libmavlink {
+namespace mav {
 
     class CRC {
     private:
@@ -126,4 +126,4 @@ namespace libmavlink {
 }
 
 
-#endif //LIBMAVLINK_UTILS_H
+#endif //MAV_UTILS_H
