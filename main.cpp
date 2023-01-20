@@ -1,97 +1,67 @@
 #include <iostream>
-#include "DynamicMessage.h"
-#include "tinyxml2/tinyxml2.h"
+#include "MessageSet.h"
+#include "BuiltInMessages.h"
+#include "Network.h"
+#include "Connection.h"
+#include <array>
 
-
-bool isPrefix(std::string_view prefix, std::string_view full)
-{
-    return prefix == full.substr(0, prefix.size());
-}
-
-
-libmavlink::FieldType parseFieldType(const std::string &field_type_string) {
-    int size = 1;
-    size_t array_notation_start_idx = field_type_string.find('[');
-    std::string base_type_substr;
-    if (array_notation_start_idx != std::string::npos) {
-        auto size_substr = field_type_string.substr(
-                array_notation_start_idx + 1, field_type_string.length() - array_notation_start_idx - 2);
-        size = std::stoi(size_substr);
-    }
-
-    if (isPrefix("uint8_t", field_type_string)) {
-        return {libmavlink::FieldType::BaseType::UINT8, size};
-    } else if (isPrefix("uint16_t", field_type_string)) {
-        return {libmavlink::FieldType::BaseType::UINT16, size};
-    } else if (isPrefix("uint32_t", field_type_string)) {
-        return {libmavlink::FieldType::BaseType::UINT32, size};
-    } else if (isPrefix("uint64_t", field_type_string)) {
-        return {libmavlink::FieldType::BaseType::UINT64, size};
-    } else if (isPrefix("int8_t", field_type_string)) {
-        return {libmavlink::FieldType::BaseType::INT8, size};
-    } else if (isPrefix("int16_t", field_type_string)) {
-        return {libmavlink::FieldType::BaseType::INT16, size};
-    } else if (isPrefix("int32_t", field_type_string)) {
-        return {libmavlink::FieldType::BaseType::INT32, size};
-    } else if (isPrefix("int64_t", field_type_string)) {
-        return {libmavlink::FieldType::BaseType::INT64, size};
-    } else if (isPrefix("char", field_type_string)) {
-        return {libmavlink::FieldType::BaseType::CHAR, size};
-    } else if (isPrefix("float", field_type_string)) {
-        return {libmavlink::FieldType::BaseType::FLOAT, size};
-    } else if (isPrefix("double", field_type_string)) {
-        return {libmavlink::FieldType::BaseType::DOUBLE, size};
-    }
-    return {libmavlink::FieldType::BaseType::UNKNOWN, 0};
-}
 
 int main() {
 
-    tinyxml2::XMLDocument document;
-    document.LoadFile("/home/thomas/projects/mavlink/message_definitions/v1.0/common.xml");
+    libmavlink::MessageSet m{"/home/thomas/projects/mavlink/message_definitions/v1.0/common.xml"};
 
-    auto messages_node = document.RootElement()->FirstChildElement("messages");
+    auto message = m.createMessage("PARAM_EXT_SET");
 
-    std::vector<libmavlink::DynamicMessage> out_messages;
+    message.set("target_system", 1);
+    message.set("target_component", 3);
+    message.set("param_id", "TEST_PARAM");
+    message.set("param_value", "BLAVALUE");
 
-    for (auto message = messages_node->FirstChildElement();
-        message != nullptr;
-        message = message->NextSiblingElement()) {
 
-        libmavlink::DynamicMessageBuilder builder{
-            message->Attribute("name"),
-            std::stoi(message->Attribute("id"))
-        };
+    message["target_system"] = 1;
+    message["param_value"][3] = 'f';
+    message["param_value"];
 
-        std::string description;
+    std::vector<int> b{1,2,3};
 
-        bool in_extension_fields = false;
-        for (auto field = message->FirstChildElement();
-            field != nullptr;
-            field = field->NextSiblingElement()) {
+    message.set<std::vector<int>>("param_value", b);
+    message["param_value"]  = b;
 
-            if (std::strcmp(field->Value(), "description") == 0) {
-                description = field->GetText();
-            } else if (std::strcmp(field->Value(), "extensions") == 0) {
-                in_extension_fields = true;
-            } else if (std::strcmp(field->Value(), "field") == 0) {
-                // parse the field
-                auto type = parseFieldType(field->Attribute("type"));
-                auto name = field->Attribute("name");
+    std::array<float, 128> a = message["param_value"];
+    std::vector<float> q = message["param_value"];
 
-                if (!in_extension_fields) {
-                    builder.addField(name, type);
-                } else {
-                    builder.addExtensionField(name, type);
-                }
-            }
-        }
-        out_messages.emplace_back(builder.build());
-    }
 
-    for (const auto &m : out_messages) {
-        std::cout << "." << std::endl;
-    }
+    message.get<std::array<char, 16>>("param_id");
+
+
+    message.get<char>("param_value", 5);
+
+    char c = message["param_value"][6];
+
+
+    message.set({
+        {"target_system", 1},
+        {"target_component", 2},
+        {"param_id", "TEST_PARAM"},
+        {"param_value", "TESTVALUE"}
+    });
+
+    message.header().seq() = 1;
+    message.header().msgId() = 15;
+
+
+    message.get<int>("param_id");
+
+    float x = message["param_id"];
+
+
+    message.finalize(0, 1, 1);
+
+    std::cout << serial_size  << std::endl;
 
     return 0;
 }
+
+
+
+
