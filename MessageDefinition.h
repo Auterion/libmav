@@ -209,6 +209,14 @@ namespace mav {
             }
             return it->second;
         }
+
+        [[nodiscard]] std::vector<std::string> fieldNames() const {
+            std::vector<std::string> keys;
+            for(auto const& item: _fields) {
+                keys.push_back(item.first);
+            }
+            return keys;
+        }
     };
 
 

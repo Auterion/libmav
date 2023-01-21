@@ -65,17 +65,17 @@ namespace mav {
         inline T _readSingle(const Field &field, int in_field_offset = 0) const {
             const uint8_t* b_ptr = _backing_memory->data() + field.offset + in_field_offset;
             switch (field.type.base_type) {
-                case FieldType::BaseType::CHAR: return static_cast<T>(deserialize<char*>(b_ptr));
-                case FieldType::BaseType::UINT8: return static_cast<T>(deserialize<uint8_t*>(b_ptr));
-                case FieldType::BaseType::UINT16: return static_cast<T>(deserialize<uint16_t*>(b_ptr));
-                case FieldType::BaseType::UINT32: return static_cast<T>(deserialize<uint32_t*>(b_ptr));
-                case FieldType::BaseType::UINT64: return static_cast<T>(deserialize<uint64_t*>(b_ptr));
-                case FieldType::BaseType::INT8: return static_cast<T>(deserialize<int8_t*>(b_ptr));
-                case FieldType::BaseType::INT16: return static_cast<T>(deserialize<int16_t*>(b_ptr));
-                case FieldType::BaseType::INT32: return static_cast<T>(deserialize<int32_t*>(b_ptr));
-                case FieldType::BaseType::INT64: return static_cast<T>(deserialize<int64_t*>(b_ptr));
-                case FieldType::BaseType::FLOAT: return static_cast<T>(deserialize<float*>(b_ptr));
-                case FieldType::BaseType::DOUBLE: return static_cast<T>(deserialize<double*>(b_ptr));
+                case FieldType::BaseType::CHAR: return static_cast<T>(deserialize<char>(b_ptr));
+                case FieldType::BaseType::UINT8: return static_cast<T>(deserialize<uint8_t>(b_ptr));
+                case FieldType::BaseType::UINT16: return static_cast<T>(deserialize<uint16_t>(b_ptr));
+                case FieldType::BaseType::UINT32: return static_cast<T>(deserialize<uint32_t>(b_ptr));
+                case FieldType::BaseType::UINT64: return static_cast<T>(deserialize<uint64_t>(b_ptr));
+                case FieldType::BaseType::INT8: return static_cast<T>(deserialize<int8_t>(b_ptr));
+                case FieldType::BaseType::INT16: return static_cast<T>(deserialize<int16_t>(b_ptr));
+                case FieldType::BaseType::INT32: return static_cast<T>(deserialize<int32_t>(b_ptr));
+                case FieldType::BaseType::INT64: return static_cast<T>(deserialize<int64_t>(b_ptr));
+                case FieldType::BaseType::FLOAT: return static_cast<T>(deserialize<float>(b_ptr));
+                case FieldType::BaseType::DOUBLE: return static_cast<T>(deserialize<double>(b_ptr));
                 case FieldType::BaseType::UNKNOWN: return T{};
             }
             return T{};
@@ -99,14 +99,15 @@ namespace mav {
             _initPairType(std::string key, double value) : key(std::move(key)), var{value} {};
         };
 
+        template <typename MessageType>
         class _accessorType {
         private:
             const std::string &_field_name;
-            Message &_message;
+            MessageType &_message;
             int _array_index;
 
         public:
-            _accessorType(const std::string &field_name, Message &message, int array_index) :
+            _accessorType(const std::string &field_name, MessageType &message, int array_index) :
                 _field_name(field_name), _message(message), _array_index(array_index) {}
 
             template <typename T>
@@ -252,8 +253,12 @@ namespace mav {
         }
 
 
-        _accessorType operator[](const std::string &field_name) {
-            return {field_name, *this, 0};
+        _accessorType<const Message> operator[](const std::string &field_name) const {
+            return _accessorType<const Message>{field_name, *this, 0};
+        }
+
+        _accessorType<Message> operator[](const std::string &field_name) {
+            return _accessorType<Message>{field_name, *this, 0};
         }
 
 
@@ -293,4 +298,4 @@ namespace mav {
 
 #endif //MAV_DYNAMICMESSAGE_H
 
-} // namespace libmavlink
+} // namespace libmavlink`
