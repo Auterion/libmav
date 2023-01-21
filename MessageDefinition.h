@@ -197,6 +197,10 @@ namespace mav {
             return _max_payload_length;
         }
 
+        [[nodiscard]] inline uint8_t crcExtra() const {
+            return _crc_extra;
+        }
+
         [[nodiscard]] const Field& fieldForName(const std::string &field_key) const {
             auto it = _fields.find(field_key);
             if (it == _fields.end()) {

@@ -5,6 +5,8 @@
 #ifndef MAV_CONNECTION_H
 #define MAV_CONNECTION_H
 
+#include <mutex>
+
 namespace mav {
 
     class TimeoutException : public std::runtime_error {
@@ -28,6 +30,8 @@ namespace mav {
         std::function<void(const Message &message)> _send_to_network_function;
         std::function<void(void)> _on_connect_callback;
         std::function<void(void)> _on_disconnect_callback;
+
+        std::mutex _message_callback_mtx;
         std::function<void(const Message &message)> _message_callback;
 
     public:
@@ -46,8 +50,9 @@ namespace mav {
             if (message.header().msgId() == _heartbeat_message_id) {
                 _last_heartbeat_ms = millis();
             }
-            std::cout << message.type()->name() << std::endl;
+
             if (_message_callback) {
+                std::scoped_lock<std::mutex> lock(_message_callback_mtx);
                 _message_callback(message);
             }
         }
@@ -74,7 +79,8 @@ namespace mav {
         }
 
         template<typename T>
-        void setMessageCallback(T on_message) {
+        void setMessageCallback(const T &on_message) {
+            std::scoped_lock<std::mutex> lock(_message_callback_mtx);
             _message_callback = on_message;
         }
 

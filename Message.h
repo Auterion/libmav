@@ -128,6 +128,14 @@ namespace mav {
             return _message_definition;
         }
 
+        [[nodiscard]] int id() const {
+            return _message_definition->id();
+        }
+
+        [[nodiscard]] const std::string& name() const {
+            return _message_definition->name();
+        }
+
         [[nodiscard]] Header header() const {
             return Header(_backing_memory->data());
         }

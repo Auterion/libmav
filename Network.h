@@ -63,20 +63,19 @@ namespace mav {
                                    wire_length - MessageDefinition::HEADER_SIZE);
                 int crc_offset = MessageDefinition::HEADER_SIZE + header.len();
 
-                CRC crc;
-                crc.accumulate(backing_memory->begin() + 1, backing_memory->begin() + crc_offset);
-                auto crc_received = deserialize<uint16_t>(backing_memory->data() + crc_offset);
-                if (crc_received != crc.crc16()) {
-                    std::cout << "crc" << std::endl;
-                    // crc error. Try to re-sync.
-                   // continue;
+                auto definition = _message_set.getMessageDefinition(header.msgId());
+                if (!definition) {
+                    // we do not know this message we can not do anything here, not even check the CRC,
+                    // do nothing and continue
+                    continue;
                 }
 
-                auto definition = _message_set.getMessageDefinition(header.msgId());
-
-                if (!definition) {
-                    std::cout << "no def" << std::endl;
-                    // we do not know this message, do nothing and continue
+                CRC crc;
+                crc.accumulate(backing_memory->begin() + 1, backing_memory->begin() + crc_offset);
+                crc.accumulate(definition->crcExtra());
+                auto crc_received = deserialize<uint16_t>(backing_memory->data() + crc_offset);
+                if (crc_received != crc.crc16()) {
+                    // crc error. Try to re-sync.
                     continue;
                 }
 
@@ -95,7 +94,7 @@ namespace mav {
         MessageSet& _message_set;
         StreamParser _parser;
         Identifier _own_id;
-        std::list<Connection> _connections;
+        std::list<Connection*> _connections;
         uint8_t _seq = 0;
 
 
@@ -113,7 +112,7 @@ namespace mav {
                 try {
                     auto message = _parser.next();
                     for (auto& connection : _connections) {
-                        connection.consumeMessageFromNetwork(message);
+                        connection->consumeMessageFromNetwork(message);
                     }
                 } catch (NetworkError &e) {
                     std::cerr << "Network failed " << e.what() << std::endl;
@@ -135,8 +134,8 @@ namespace mav {
             };
         }
 
-        void addConnection(Connection &connection) {
-            connection.template setSendMessageToNetworkFunc([this](const Message &message){
+        void addConnection(Connection *connection) {
+            connection->template setSendMessageToNetworkFunc([this](const Message &message){
                 this->_sendMessage(message);
             });
             _connections.push_back(connection);
