@@ -11,19 +11,24 @@
 #include "MessageDefinition.h"
 #include "Message.h"
 
-#include "tinyxml2/tinyxml2.h"
+#include "rapidxml/rapidxml.hpp"
+#include "rapidxml/rapidxml_utils.hpp"
 
 namespace mav {
 
     class XMLParser {
     private:
-        std::shared_ptr<tinyxml2::XMLDocument> _document;
+
+        std::shared_ptr<rapidxml::file<>> _source_file;
+        std::shared_ptr<rapidxml::xml_document<>> _document;
         std::string _root_xml_folder_path;
 
         XMLParser(
-                std::shared_ptr<tinyxml2::XMLDocument> doc,
+                std::shared_ptr<rapidxml::file<>> source_file,
+                std::shared_ptr<rapidxml::xml_document<>> document,
                 const std::string &root_xml_folder_path) :
-                _document(std::move(doc)),
+                _source_file(std::move(source_file)),
+                _document(std::move(document)),
                 _root_xml_folder_path(root_xml_folder_path) {}
 
 
@@ -70,18 +75,20 @@ namespace mav {
     public:
 
         static XMLParser forFile(const std::string &file_name) {
-            auto doc = std::make_shared<tinyxml2::XMLDocument>();
-            doc->LoadFile(file_name.c_str());
-            if (doc->ErrorID() != 0) {
-                throw std::runtime_error(doc->ErrorStr());
-            }
-            return {doc, std::filesystem::path{file_name}.parent_path().string()};
+            auto file = std::make_shared<rapidxml::file<>>(file_name.c_str());
+            auto doc = std::make_shared<rapidxml::xml_document<>>();
+            doc->parse<0>(file->data());
+
+            return {file, doc, std::filesystem::path{file_name}.parent_path().string()};
         }
 
         static XMLParser forXMLString(const std::string &xml_string) {
-            auto doc = std::make_shared<tinyxml2::XMLDocument>();
-            doc->Parse(xml_string.c_str(), xml_string.size());
-            return {doc, ""};
+            // pass by value on purpose, rapidxml mutates the string on parse
+            auto istream = std::istringstream(xml_string);
+            auto file = std::make_shared<rapidxml::file<>>(istream);
+            auto doc = std::make_shared<rapidxml::xml_document<>>();
+            doc->parse<0>(file->data());
+            return {file, doc, ""};
         }
 
 
@@ -89,43 +96,51 @@ namespace mav {
                    std::map<std::string, std::shared_ptr<const MessageDefinition>> &out_messages,
                    std::map<int, std::shared_ptr<const MessageDefinition>> &out_message_ids) {
 
-            for (auto include_element = _document->RootElement()->FirstChildElement("include");
-                include_element != nullptr;
-                include_element = include_element->NextSiblingElement("include")) {
+            auto root_node = _document->first_node("mavlink");
+            if (!root_node) {
+                throw std::runtime_error("Root node \"mavlink\" not found");
+            }
 
-                const std::string include_name = include_element->GetText();
+            for (auto include_element = root_node->first_node("include");
+                include_element != nullptr;
+                include_element = include_element->next_sibling("include")) {
+
+                const std::string include_name = include_element->value();
                 auto sub_parser = XMLParser::forFile(
                         (std::filesystem::path{_root_xml_folder_path} / include_name).string());
                 sub_parser.parse(out_enum, out_messages, out_message_ids);
             }
 
-            auto messages_node = _document->RootElement()->FirstChildElement("messages");
+            auto messages_node = root_node->first_node("messages");
+            if (!messages_node) {
+                throw std::runtime_error("Node \"messages\" not found");
+            }
 
-            for (auto message = messages_node->FirstChildElement();
+            for (auto message = messages_node->first_node();
                  message != nullptr;
-                 message = message->NextSiblingElement()) {
+                 message = message->next_sibling()) {
 
-                const std::string message_name =  message->Attribute("name");
+                const std::string message_name =  message->first_attribute("name")->value();
                 MessageDefinitionBuilder builder{
                         message_name,
-                        std::stoi(message->Attribute("id"))
+                        std::stoi(message->first_attribute("id")->value())
                 };
 
                 std::string description;
 
                 bool in_extension_fields = false;
-                for (auto field = message->FirstChildElement();
+                for (auto field = message->first_node();
                      field != nullptr;
-                     field = field->NextSiblingElement()) {
+                     field = field->next_sibling()) {
 
-                    if (std::strcmp(field->Value(), "description") == 0) {
-                        description = field->GetText();
-                    } else if (std::strcmp(field->Value(), "extensions") == 0) {
+                    if (std::string_view{"description"} == field->name()) {
+                        description = field->value();
+                    } else if (std::string_view{"extensions"} == field->name()) {
                         in_extension_fields = true;
-                    } else if (std::strcmp(field->Value(), "field") == 0) {
+                    } else if (std::string_view{"field"} == field->name()) {
                         // parse the field
-                        auto field_type = _parseFieldType(field->Attribute("type"));
-                        auto field_name = field->Attribute("name");
+                        auto field_type = _parseFieldType(field->first_attribute("type")->value());
+                        auto field_name = field->first_attribute("name")->value();
 
                         if (!in_extension_fields) {
                             builder.addField(field_name, field_type);

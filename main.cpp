@@ -11,7 +11,7 @@ int main() {
 
     mav::MessageSet message_set{"/home/thomas/projects/mavlink/message_definitions/v1.0/common.xml"};
 
-    auto physical = mav::Serial("/dev/ttyACM1", 57600);
+    auto physical = mav::Serial("/dev/ttyACM0", 57600);
     auto runtime = mav::NetworkRuntime({253, 1}, message_set, physical);
 
     auto connection = mav::Connection(message_set, {1, 1});
@@ -24,15 +24,25 @@ int main() {
 //                std::cout << "- " << name << std::endl;
 //            }
         }
-
     });
 
     while(true) {};
 
+
+//    connection.send({"HEARTBEAT", {
+//
+//    }});
+//
+//    auto response = connection.receive("HEARTBEAT");
+//
+//
+
+//
 //    auto a = message_set.createMessage("bla");
 //
 //    float q = a["bla"];
-//
+//    a["bla"] = 123;
+
 
 //
 //
