@@ -94,7 +94,7 @@ namespace mav {
         MessageSet& _message_set;
         StreamParser _parser;
         Identifier _own_id;
-        std::list<Connection*> _connections;
+        std::list<std::reference_wrapper<Connection>> _connections;
         uint8_t _seq = 0;
 
 
@@ -112,7 +112,7 @@ namespace mav {
                 try {
                     auto message = _parser.next();
                     for (auto& connection : _connections) {
-                        connection->consumeMessageFromNetwork(message);
+                        connection.get().consumeMessageFromNetwork(message);
                     }
                 } catch (NetworkError &e) {
                     std::cerr << "Network failed " << e.what() << std::endl;
@@ -134,11 +134,11 @@ namespace mav {
             };
         }
 
-        void addConnection(Connection *connection) {
-            connection->template setSendMessageToNetworkFunc([this](const Message &message){
+        void addConnection(Connection &connection) {
+            connection.template setSendMessageToNetworkFunc([this](const Message &message){
                 this->_sendMessage(message);
             });
-            _connections.push_back(connection);
+            _connections.emplace_back(connection);
         }
 
         void stop() {

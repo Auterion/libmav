@@ -11,11 +11,11 @@ int main() {
 
     mav::MessageSet message_set{"/home/thomas/projects/mavlink/message_definitions/v1.0/common.xml"};
 
-    auto physical = mav::Serial("/dev/ttyACM0", 57600);
+    auto physical = mav::Serial("/dev/ttyACM1", 57600);
     auto runtime = mav::NetworkRuntime({253, 1}, message_set, physical);
 
     auto connection = mav::Connection(message_set, {1, 1});
-    runtime.addConnection(&connection);
+    runtime.addConnection(connection);
 
     connection.setMessageCallback([&message_set](const mav::Message &message) {
         if (message.id() == message_set.idForMessage("HIGHRES_IMU")) {
