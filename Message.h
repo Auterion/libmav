@@ -229,7 +229,7 @@ namespace mav {
                 }
 
                 for (int i=0; i<field.type.size; i++) {
-                    //ret_value[i] = _readSingle<typename T::value_type>(field, i * field.type.baseSize());
+                    ret_value[i] = _readSingle<typename T::value_type>(field, i * field.type.baseSize());
                 }
                 return ret_value;
             } else {
@@ -260,6 +260,68 @@ namespace mav {
         _accessorType<Message> operator[](const std::string &field_name) {
             return _accessorType<Message>{field_name, *this, 0};
         }
+
+
+        using variant_type = std::variant<
+                char,
+                int8_t,
+                uint8_t,
+                int16_t,
+                uint16_t,
+                int32_t,
+                uint32_t,
+                int64_t,
+                uint64_t,
+                float,
+                double,
+                std::string,
+                std::vector<int8_t>,
+                std::vector<uint8_t>,
+                std::vector<int16_t>,
+                std::vector<uint16_t>,
+                std::vector<int32_t>,
+                std::vector<uint32_t>,
+                std::vector<int64_t>,
+                std::vector<uint64_t>,
+                std::vector<float>,
+                std::vector<double>
+        >;
+
+        [[nodiscard]] variant_type getAsNativeTypeInVariant(const std::string &field_key) const {
+            auto field = _message_definition->fieldForName(field_key);
+            if (field.type.size <= 1) {
+                switch (field.type.base_type) {
+                    case FieldType::BaseType::CHAR: return get<char>(field_key);
+                    case FieldType::BaseType::UINT8: return get<uint8_t>(field_key);
+                    case FieldType::BaseType::UINT16: return get<uint16_t>(field_key);
+                    case FieldType::BaseType::UINT32: return get<uint32_t>(field_key);
+                    case FieldType::BaseType::UINT64: return get<uint64_t>(field_key);
+                    case FieldType::BaseType::INT8: return get<int8_t>(field_key);
+                    case FieldType::BaseType::INT16: return get<int16_t>(field_key);
+                    case FieldType::BaseType::INT32: return get<int32_t>(field_key);
+                    case FieldType::BaseType::INT64: return get<int64_t>(field_key);
+                    case FieldType::BaseType::FLOAT: return get<float>(field_key);
+                    case FieldType::BaseType::DOUBLE: return get<double>(field_key);
+                    case FieldType::BaseType::UNKNOWN: return -1;
+                }
+            } else {
+                switch (field.type.base_type) {
+                    case FieldType::BaseType::CHAR: return get<std::string>(field_key);
+                    case FieldType::BaseType::UINT8: return get<std::vector<uint8_t>>(field_key);
+                    case FieldType::BaseType::UINT16: return get<std::vector<uint16_t>>(field_key);
+                    case FieldType::BaseType::UINT32: return get<std::vector<uint32_t>>(field_key);
+                    case FieldType::BaseType::UINT64: return get<std::vector<uint64_t>>(field_key);
+                    case FieldType::BaseType::INT8: return get<std::vector<int8_t>>(field_key);
+                    case FieldType::BaseType::INT16: return get<std::vector<int16_t>>(field_key);
+                    case FieldType::BaseType::INT32: return get<std::vector<int32_t>>(field_key);
+                    case FieldType::BaseType::INT64: return get<std::vector<int64_t>>(field_key);
+                    case FieldType::BaseType::FLOAT: return get<std::vector<float>>(field_key);
+                    case FieldType::BaseType::DOUBLE: return get<std::vector<double>>(field_key);
+                    case FieldType::BaseType::UNKNOWN: return -1;
+                }
+            }
+        }
+
 
 
         [[nodiscard]] uint32_t finalize(uint8_t seq, const Identifier &sender) const {
