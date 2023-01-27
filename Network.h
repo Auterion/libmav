@@ -22,9 +22,17 @@ namespace mav {
         explicit NetworkError(const std::string& message) : std::runtime_error(message) {}
     };
 
+    class NetworkClosed : public NetworkError {
+    public:
+        explicit NetworkClosed(const char* message) : NetworkError(message) {}
+        explicit NetworkClosed(const std::string& message) : NetworkError(message) {}
+    };
+
+    class NetworkInterfaceInterrupt : public std::exception {};
 
     class NetworkInterface {
     public:
+        virtual void close() const = 0;
         virtual void send(const uint8_t* data, uint32_t size) const = 0;
         virtual void receive(uint8_t* destination, uint32_t size) const = 0;
     };
@@ -117,6 +125,8 @@ namespace mav {
                 } catch (NetworkError &e) {
                     std::cerr << "Network failed " << e.what() << std::endl;
                     _should_terminate.store(true);
+                } catch (NetworkInterfaceInterrupt &e) {
+                    _should_terminate.store(true);
                 }
             }
         }
@@ -142,6 +152,7 @@ namespace mav {
         }
 
         void stop() {
+            _interface.close();
             _should_terminate.store(true);
             if (_receive_thread.joinable()) {
                 _receive_thread.join();

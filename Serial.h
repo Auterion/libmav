@@ -1,6 +1,7 @@
 //
 // Created by thomas on 20.01.23.
 //
+#include <atomic>
 #include <unistd.h>
 #include <fcntl.h>
 #include <termios.h>
@@ -14,6 +15,7 @@ namespace mav {
     class Serial : public NetworkInterface {
     private:
         int _fd;
+        mutable std::atomic_bool _should_terminate{false};
 
     public:
         Serial(const std::string &device, int baud, bool flow_control = true) {
@@ -23,7 +25,7 @@ namespace mav {
             }
             struct termios tc{};
             if (tcgetattr(_fd, &tc) != 0) {
-                close(_fd);
+                ::close(_fd);
                 throw NetworkError(StringFormat() << "Failed to get tc attrs" << StringFormat::end);
             }
 
@@ -41,48 +43,55 @@ namespace mav {
             }
 
             if (cfsetspeed(&tc, baud) != 0) {
-                close(_fd);
+                ::close(_fd);
                 throw NetworkError(StringFormat() << "Failed to set baud rate to " << baud << StringFormat::end);
             }
 
             if (tcsetattr(_fd, TCSANOW, &tc) != 0) {
-                close(_fd);
+                ::close(_fd);
                 throw NetworkError(StringFormat() << "Failed to set TCSANOW" << StringFormat::end);
             }
         }
 
 
-        void stop() const {
-            close(_fd);
-        }
-
         void send(const uint8_t* data, uint32_t size) const override {
             uint32_t sent = 0;
-            while (sent < size) {
+            while (sent < size && !_should_terminate.load()) {
                 auto ret = write(_fd, data, size - sent);
                 if (ret < 0) {
-                    stop();
-                    throw NetworkError("Serial send failed");
+                    ::close(_fd);
+                    throw NetworkClosed("Serial send failed");
                 }
                 sent += static_cast<uint32_t>(ret);
+            }
+            if (_should_terminate.load()) {
+                throw NetworkInterfaceInterrupt();
             }
         };
 
         void receive(uint8_t* data, uint32_t size) const override {
             uint32_t received = 0;
-            while (received < size) {
+            while (received < size && !_should_terminate.load()) {
                 auto ret = read(_fd, data, size - received);
                 if (ret < 0) {
-                    stop();
-                    throw NetworkError("Serial read failed");
+                    ::close(_fd);
+                    throw NetworkClosed("Serial read failed");
                 }
                 received += ret;
             }
+            if (_should_terminate.load()) {
+                throw NetworkInterfaceInterrupt();
+            }
         };
+
+        void close() const {
+            _should_terminate.store(true);
+            ::close(_fd);
+        }
 
 
         virtual ~Serial() {
-            stop();
+            ::close(_fd);
         }
     };
 

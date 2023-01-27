@@ -1,6 +1,5 @@
 #include <iostream>
 #include "MessageSet.h"
-#include "BuiltInMessages.h"
 #include "Network.h"
 #include "Connection.h"
 #include "Serial.h"
@@ -26,7 +25,8 @@ int main() {
         }
     });
 
-    while(true) {};
+    uint64_t start = mav::millis();
+    while((mav::millis() - start) < 1000) {};
 
 
 //    connection.send({"HEARTBEAT", {
