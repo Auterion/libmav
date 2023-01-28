@@ -7,6 +7,7 @@
 
 #include <utility>
 #include <filesystem>
+#include <memory>
 
 #include "MessageDefinition.h"
 #include "Message.h"
@@ -180,20 +181,20 @@ namespace mav {
         }
 
 
-        [[nodiscard]] std::shared_ptr<const MessageDefinition> getMessageDefinition(const std::string &message_name) const {
+        [[nodiscard]] OptionalReference<const MessageDefinition> getMessageDefinition(const std::string &message_name) const {
             auto message_definition = _messages.find(message_name);
             if (message_definition == _messages.end()) {
-                return nullptr;
+                return std::nullopt;
             }
-            return message_definition->second;
+            return *(message_definition->second);
         }
 
-        [[nodiscard]] std::shared_ptr<const MessageDefinition> getMessageDefinition(int message_id) const {
+        [[nodiscard]] OptionalReference<const MessageDefinition> getMessageDefinition(int message_id) const {
             auto message_definition = _message_ids.find(message_id);
             if (message_definition == _message_ids.end()) {
-                return nullptr;
+                return std::nullopt;
             }
-            return message_definition->second;
+            return *(message_definition->second);
         }
 
         Message createMessage(const std::string &message_name) {
@@ -202,7 +203,7 @@ namespace mav {
                 throw std::out_of_range(StringFormat() << "No message of name " << message_name <<
                     " in message set." << StringFormat::end);
             }
-            return Message{message_definition};
+            return Message{message_definition.get()};
         }
 
         [[nodiscard]] int idForMessage(const std::string &message_name) const {

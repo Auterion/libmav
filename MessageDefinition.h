@@ -30,57 +30,90 @@ namespace mav {
         }
     };
 
-
+    template <typename BackingMemoryPointerType>
     class Header {
     private:
-        uint8_t *_backing_memory;
+        BackingMemoryPointerType _backing_memory;
 
         class _MsgId {
         private:
-            uint8_t* _ptr;
+            BackingMemoryPointerType _ptr;
         public:
-            explicit _MsgId(uint8_t *ptr) : _ptr(ptr) {}
+            explicit _MsgId(BackingMemoryPointerType ptr) : _ptr(ptr) {}
 
-            operator int() {
-                return static_cast<int>((*static_cast<uint32_t*>(static_cast<void*>(_ptr))) & 0xFFFFFF);
+            operator int() const {
+                return static_cast<int>((*static_cast<const uint32_t*>(static_cast<const void*>(_ptr))) & 0xFFFFFF);
             }
 
-            void operator=(int v) {
+            _MsgId& operator=(int v) {
                 _ptr[0] = static_cast<uint8_t>(v & 0xFF);
                 _ptr[1] = static_cast<uint8_t>((v >> 8) & 0xFF);
                 _ptr[2] = static_cast<uint8_t>((v >> 16) & 0xFF);
+                return *this;
             }
         };
 
     public:
-        explicit Header(uint8_t *backing_memory) : _backing_memory(backing_memory) {}
+        explicit Header(BackingMemoryPointerType backing_memory) : _backing_memory(backing_memory) {}
 
-        [[nodiscard]] inline uint8_t& magic() const {
+        [[nodiscard]] inline uint8_t& magic(){
             return _backing_memory[0];
         }
 
-        [[nodiscard]] inline uint8_t& len() const {
+        [[nodiscard]] inline uint8_t magic() const {
+            return _backing_memory[0];
+        }
+
+        [[nodiscard]] inline uint8_t& len() {
             return _backing_memory[1];
         }
 
-        [[nodiscard]] inline uint8_t& incompatFlags() const {
+        [[nodiscard]] inline uint8_t len() const {
+            return _backing_memory[1];
+        }
+
+        [[nodiscard]] inline uint8_t& incompatFlags() {
             return _backing_memory[2];
         }
 
-        [[nodiscard]] inline uint8_t& compatFlags() const {
+        [[nodiscard]] inline uint8_t incompatFlags() const {
+            return _backing_memory[2];
+        }
+
+        [[nodiscard]] inline uint8_t& compatFlags() {
             return _backing_memory[3];
         }
 
-        [[nodiscard]] inline uint8_t& seq() const {
+        [[nodiscard]] inline uint8_t compatFlags() const {
+            return _backing_memory[3];
+        }
+
+        [[nodiscard]] inline uint8_t& seq() {
             return _backing_memory[4];
         }
 
-        [[nodiscard]] inline uint8_t& systemId() const {
+        [[nodiscard]] inline uint8_t seq() const {
+            return _backing_memory[4];
+        }
+
+        [[nodiscard]] inline uint8_t& systemId() {
             return _backing_memory[5];
         }
 
-        [[nodiscard]] inline uint8_t& componentId() const {
+        [[nodiscard]] inline uint8_t systemId() const {
+            return _backing_memory[5];
+        }
+
+        [[nodiscard]] inline uint8_t& componentId() {
             return _backing_memory[6];
+        }
+
+        [[nodiscard]] inline uint8_t componentId() const {
+            return _backing_memory[6];
+        }
+
+        [[nodiscard]] inline _MsgId msgId() {
+            return _MsgId(_backing_memory + 7);
         }
 
         [[nodiscard]] inline _MsgId msgId() const {
@@ -177,9 +210,11 @@ namespace mav {
         {}
 
     public:
+        static constexpr int MAX_PAYLOAD_SIZE = 255;
         static constexpr int HEADER_SIZE = 10;
         static constexpr int CHECKSUM_SIZE = 2;
         static constexpr int SIGNATURE_SIZE = 13;
+        static constexpr int MAX_MESSAGE_SIZE = MAX_PAYLOAD_SIZE + HEADER_SIZE + CHECKSUM_SIZE + SIGNATURE_SIZE;
 
         [[nodiscard]] inline const std::string& name() const {
             return _name;

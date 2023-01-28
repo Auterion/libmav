@@ -92,6 +92,27 @@ namespace mav {
     };
 
 
+    template <typename T>
+    class OptionalReference {
+    private:
+        T* _ptr;
+
+    public:
+        OptionalReference(T &value) : _ptr{std::addressof(value)} {}
+
+        OptionalReference(std::nullopt_t) : _ptr{nullptr} {}
+
+        operator bool() const {
+            return _ptr != nullptr;
+        }
+
+        T& get() {
+            return *_ptr;
+        }
+    };
+
+
+
     template<typename T, typename... Rest>
     struct is_any : std::false_type {};
 

@@ -56,38 +56,43 @@ namespace mav {
         _interface(interface), _message_set(message_set) {}
 
         [[nodiscard]] Message next() const {
+
+            std::array<uint8_t, MessageDefinition::MAX_MESSAGE_SIZE> backing_memory{};
             while (true) {
                 // synchronize
                 while (!_checkMagicByte()) {}
 
-                auto backing_memory = std::make_shared<std::vector<uint8_t>>(280);
-                (*backing_memory)[0] = 0xFD;
-                _interface.receive(backing_memory->data() + 1, MessageDefinition::HEADER_SIZE -1);
-                Header header{backing_memory->data()};
-                bool message_is_signed = header.incompatFlags() & 0x01;
-                int wire_length = MessageDefinition::HEADER_SIZE + header.len() + MessageDefinition::CHECKSUM_SIZE +
-                                  (message_is_signed ? MessageDefinition::SIGNATURE_SIZE : 0);
-                _interface.receive(backing_memory->data() + MessageDefinition::HEADER_SIZE,
-                                   wire_length - MessageDefinition::HEADER_SIZE);
-                int crc_offset = MessageDefinition::HEADER_SIZE + header.len();
+                //auto backing_memory = std::make_shared<std::vector<uint8_t>>(280);
 
-                auto definition = _message_set.getMessageDefinition(header.msgId());
-                if (!definition) {
+
+                backing_memory[0] = 0xFD;
+                _interface.receive(backing_memory.data() + 1, MessageDefinition::HEADER_SIZE -1);
+                Header header{backing_memory.data()};
+                const bool message_is_signed = header.incompatFlags() & 0x01;
+                const int wire_length = MessageDefinition::HEADER_SIZE + header.len() + MessageDefinition::CHECKSUM_SIZE +
+                                  (message_is_signed ? MessageDefinition::SIGNATURE_SIZE : 0);
+                _interface.receive(backing_memory.data() + MessageDefinition::HEADER_SIZE,
+                                   wire_length - MessageDefinition::HEADER_SIZE);
+                const int crc_offset = MessageDefinition::HEADER_SIZE + header.len();
+
+                auto definition_opt = _message_set.getMessageDefinition(header.msgId());
+                if (!definition_opt) {
                     // we do not know this message we can not do anything here, not even check the CRC,
                     // do nothing and continue
                     continue;
                 }
+                auto &definition = definition_opt.get();
 
                 CRC crc;
-                crc.accumulate(backing_memory->begin() + 1, backing_memory->begin() + crc_offset);
-                crc.accumulate(definition->crcExtra());
-                auto crc_received = deserialize<uint16_t>(backing_memory->data() + crc_offset);
+                crc.accumulate(backing_memory.begin() + 1, backing_memory.begin() + crc_offset);
+                crc.accumulate(definition.crcExtra());
+                auto crc_received = deserialize<uint16_t>(backing_memory.data() + crc_offset);
                 if (crc_received != crc.crc16()) {
                     // crc error. Try to re-sync.
                     continue;
                 }
 
-                return Message::instantiate(definition, backing_memory);
+                return Message::_instantiateFromMemory(definition, std::move(backing_memory));
             }
         }
     };
@@ -106,8 +111,8 @@ namespace mav {
         uint8_t _seq = 0;
 
 
-        void _sendMessage(const Message &message) {
-            int wire_length = message.finalize(_seq++, _own_id);
+        void _sendMessage(Message &message) {
+            int wire_length = static_cast<int>(message.finalize(_seq++, _own_id));
             _interface.send(message.data(), wire_length);
         }
 
@@ -145,7 +150,7 @@ namespace mav {
         }
 
         void addConnection(Connection &connection) {
-            connection.template setSendMessageToNetworkFunc([this](const Message &message){
+            connection.template setSendMessageToNetworkFunc([this](Message &message){
                 this->_sendMessage(message);
             });
             _connections.emplace_back(connection);

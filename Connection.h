@@ -27,7 +27,7 @@ namespace mav {
         uint64_t _last_heartbeat_ms = 0;
 
         // callbacks
-        std::function<void(const Message &message)> _send_to_network_function;
+        std::function<void(Message &message)> _send_to_network_function;
         std::function<void(void)> _on_connect_callback;
         std::function<void(void)> _on_disconnect_callback;
 
@@ -62,7 +62,7 @@ namespace mav {
             _send_to_network_function = send_function;
         }
 
-        void forceSend(const Message &message) {
+        void forceSend(Message &message) {
             if (!_send_to_network_function) {
                 return;
             }
@@ -71,7 +71,7 @@ namespace mav {
         }
 
 
-        void send(const Message &message) {
+        void send(Message &message) {
             if (millis() - _last_heartbeat_ms >= CONNECTION_TIMEOUT) {
                 throw TimeoutException{"Mavlink connection timed out"};
             }
