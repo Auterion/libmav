@@ -11,6 +11,19 @@
 int main() {
     mav::MessageSet message_set{"/home/thomas/projects/mavlink/message_definitions/v1.0/common.xml"};
 
+
+    auto message = message_set.createMessage("CHANGE_OPERATOR_CONTROL");
+
+    std::string s = message["passkey"];
+    std::cout << "PASSKEY BEFORE: " << s << std::endl;
+    message["passkey"] = "Hello world";
+
+    message.setFromString("passkey", "BLA");
+
+    std::cout << "PASSKEY AFTER: " << message.getAsString("passkey") << std::endl;
+
+
+    return 0;
     auto physical = mav::Serial("/dev/ttyACM0", 57600);
     auto runtime = mav::NetworkRuntime({253, 1}, message_set, physical);
 

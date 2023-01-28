@@ -207,7 +207,12 @@ namespace mav {
             }
             int i = 0;
             for (char c : v) {
-                _writeSingle(field, c, i * field.type.baseSize());
+                _writeSingle(field, c, i);
+                i++;
+            }
+            // write a terminating zero only if there is still enough space
+            if (i < field.type.size) {
+                _writeSingle(field, '\0', i);
                 i++;
             }
             return *this;
@@ -252,8 +257,10 @@ namespace mav {
                 throw std::runtime_error(StringFormat() << "Field " << field_key <<
                                                         " is not of type char" << StringFormat::end);
             }
+            int real_string_length = strnlen(_backing_memory.data() + field.offset, field.type.size);
+
             return std::string{reinterpret_cast<const char*>(_backing_memory.data() + field.offset),
-                               static_cast<std::string::size_type>(field.type.size)};
+                               static_cast<std::string::size_type>(real_string_length)};
         }
 
 
