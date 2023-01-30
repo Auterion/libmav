@@ -33,8 +33,8 @@ namespace mav {
     class NetworkInterface {
     public:
         virtual void close() const = 0;
-        virtual void send(const uint8_t* data, uint32_t size) const = 0;
-        virtual void receive(uint8_t* destination, uint32_t size) const = 0;
+        virtual void send(const uint8_t* data, uint32_t size) = 0;
+        virtual void receive(uint8_t* destination, uint32_t size) = 0;
     };
 
 

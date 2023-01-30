@@ -3,6 +3,8 @@
 #include "Network.h"
 #include "Connection.h"
 #include "Serial.h"
+#include "TCP.h"
+#include "UDPPassive.h"
 #include <array>
 #include "MessageFieldIterator.h"
 
@@ -22,37 +24,10 @@ int main() {
 )"""");
 
 
-    auto message = message_set.create("CHANGE_OPERATOR_CONTROL");
 
-    auto message11 = message_set.create("TEMPERATURE_MEASUREMENT");
-    message11["temperature"] = 13.3;
-
-    auto message12 = message_set.create("TEMPERATURE_MEASUREMENT")({
-        {"temperature", 13.3}
-    });
-
-
-    std::string s = message["passkey"];
-    std::cout << "PASSKEY BEFORE: " << s << std::endl;
-    message["passkey"] = "Hello world";
-
-    message.setFromString("passkey", "BLA");
-
-    std::cout << "PASSKEY AFTER: " << static_cast<std::string>(message["passkey"]) << std::endl;
-
-
-    message.set({
-                        {"passkey", "Init list test"}
-    });
-    std::cout << "PASSKEY INIT: " << static_cast<std::string>(message["passkey"]) << std::endl;
-
-    for (const auto &item : mav::FieldIterate(message)) {
-        std::cout << item.first << std::endl;
-    }
-
-
-    return 0;
-    auto physical = mav::Serial("/dev/ttyACM0", 57600);
+    //auto physical = mav::Serial("/dev/ttyACM0", 57600);
+    auto physical = mav::TCP("10.41.1.1", 5790);
+    //auto physical = mav::UDPPassive(14550);
     auto runtime = mav::NetworkRuntime({253, 1}, message_set, physical);
 
     auto connection = mav::Connection(message_set, {1, 1});
@@ -64,11 +39,45 @@ int main() {
 //            for (auto &name : message.type()->fieldNames()) {
 //                std::cout << "- " << name << std::endl;
 //            }
+        } else {
+            std::cout << message.name() << std::endl;
         }
     });
 
     uint64_t start = mav::millis();
-    while((mav::millis() - start) < 1000) {};
+    while((mav::millis() - start) < 100000) {};
+
+
+//    auto message = message_set.create("CHANGE_OPERATOR_CONTROL");
+//
+//    auto message11 = message_set.create("TEMPERATURE_MEASUREMENT");
+//    message11["temperature"] = 13.3;
+//
+//    auto message12 = message_set.create("TEMPERATURE_MEASUREMENT")({
+//                                                                           {"temperature", 13.3}
+//                                                                   });
+//
+//
+//    std::string s = message["passkey"];
+//    std::cout << "PASSKEY BEFORE: " << s << std::endl;
+//    message["passkey"] = "Hello world";
+//
+//    message.setFromString("passkey", "BLA");
+//
+//    std::cout << "PASSKEY AFTER: " << static_cast<std::string>(message["passkey"]) << std::endl;
+//
+//
+//    message.set({
+//                        {"passkey", "Init list test"}
+//                });
+//    std::cout << "PASSKEY INIT: " << static_cast<std::string>(message["passkey"]) << std::endl;
+//
+//    for (const auto &item : mav::FieldIterate(message)) {
+//        std::cout << item.first << std::endl;
+//    }
+//
+//
+//    return 0;
 
 
 //    connection.send({"HEARTBEAT", {

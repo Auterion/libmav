@@ -54,7 +54,7 @@ namespace mav {
         }
 
 
-        void send(const uint8_t* data, uint32_t size) const override {
+        void send(const uint8_t* data, uint32_t size) const {
             uint32_t sent = 0;
             while (sent < size && !_should_terminate.load()) {
                 auto ret = write(_fd, data, size - sent);
@@ -69,7 +69,7 @@ namespace mav {
             }
         };
 
-        void receive(uint8_t* data, uint32_t size) const override {
+        void receive(uint8_t* data, uint32_t size) const {
             uint32_t received = 0;
             while (received < size && !_should_terminate.load()) {
                 auto ret = read(_fd, data, size - received);
