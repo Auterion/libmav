@@ -14,6 +14,32 @@
 
 namespace mav {
 
+    using NativeVariantType = std::variant<
+            char,
+            int8_t,
+            uint8_t,
+            int16_t,
+            uint16_t,
+            int32_t,
+            uint32_t,
+            int64_t,
+            uint64_t,
+            float,
+            double,
+            std::string,
+            std::vector<int8_t>,
+            std::vector<uint8_t>,
+            std::vector<int16_t>,
+            std::vector<uint16_t>,
+            std::vector<int32_t>,
+            std::vector<uint32_t>,
+            std::vector<int64_t>,
+            std::vector<uint64_t>,
+            std::vector<float>,
+            std::vector<double>
+    >;
+
+
     // forward declared MessageSet
     class MessageSet;
 
@@ -88,16 +114,7 @@ namespace mav {
             return Message{definition, std::move(backing_memory)};
         }
 
-        class _initPairType {
-        public:
-            const std::string key;
-            const std::variant<char, int, long, float, double, std::string> var;
-
-            _initPairType(std::string key, const std::string &value) : key(std::move(key)), var{value} {};
-            _initPairType(std::string key, int value) : key(std::move(key)), var{value} {};
-            _initPairType(std::string key, float value) : key(std::move(key)), var{value} {};
-            _initPairType(std::string key, double value) : key(std::move(key)), var{value} {};
-        };
+        using _InitPairType = std::pair<const std::string, NativeVariantType>;
 
         template <typename MessageType>
         class _accessorType {
@@ -145,26 +162,17 @@ namespace mav {
             return Header<uint8_t*>(_backing_memory.data());
         }
 
-        Message& set(std::initializer_list<_initPairType> init) {
+        Message& set(std::initializer_list<_InitPairType> init) {
             for (const auto &pair : init) {
-                if (auto* v_char = std::get_if<char>(&pair.var)) {
-                    set(pair.key, *v_char);
-                } else if (auto* v_int = std::get_if<int>(&pair.var)) {
-                    set(pair.key, *v_int);
-                } else if (auto* v_long = std::get_if<long>(&pair.var)) {
-                    set(pair.key, *v_long);
-                } else if (auto* v_float = std::get_if<float>(&pair.var)) {
-                    set(pair.key, *v_float);
-                } else if (auto* v_double = std::get_if<double>(&pair.var)) {
-                    set(pair.key, *v_double);
-                } else if (auto* v_string = std::get_if<std::string>(&pair.var)) {
-                    setFromString(pair.key, *v_string);
-                }
+                const auto &key = pair.first;
+                std::visit([this, &key](auto&& arg) {
+                    this->set(key, arg);
+                }, pair.second);
             }
             return *this;
         }
 
-        Message& operator()(std::initializer_list<_initPairType> init) {
+        Message& operator()(std::initializer_list<_InitPairType> init) {
             this->set(std::move(init));
             return *this;
         }
@@ -279,32 +287,7 @@ namespace mav {
         }
 
 
-        using variant_type = std::variant<
-                char,
-                int8_t,
-                uint8_t,
-                int16_t,
-                uint16_t,
-                int32_t,
-                uint32_t,
-                int64_t,
-                uint64_t,
-                float,
-                double,
-                std::string,
-                std::vector<int8_t>,
-                std::vector<uint8_t>,
-                std::vector<int16_t>,
-                std::vector<uint16_t>,
-                std::vector<int32_t>,
-                std::vector<uint32_t>,
-                std::vector<int64_t>,
-                std::vector<uint64_t>,
-                std::vector<float>,
-                std::vector<double>
-        >;
-
-        [[nodiscard]] variant_type getAsNativeTypeInVariant(const std::string &field_key) const {
+        [[nodiscard]] NativeVariantType getAsNativeTypeInVariant(const std::string &field_key) const {
             auto field = _message_definition.fieldForName(field_key);
             if (field.type.size <= 1) {
                 switch (field.type.base_type) {

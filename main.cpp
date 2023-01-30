@@ -41,6 +41,14 @@ int main() {
     std::cout << "PASSKEY AFTER: " << static_cast<std::string>(message["passkey"]) << std::endl;
 
 
+    message.set({
+                        {"passkey", "Init list test"},
+                        {"numbers", std::vector{12, 2, 3}},
+                        {"ab", 2}
+    });
+    std::cout << "PASSKEY INIT: " << static_cast<std::string>(message["passkey"]) << std::endl;
+
+
     return 0;
     auto physical = mav::Serial("/dev/ttyACM0", 57600);
     auto runtime = mav::NetworkRuntime({253, 1}, message_set, physical);
