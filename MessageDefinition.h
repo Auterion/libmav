@@ -245,6 +245,14 @@ namespace mav {
             return it->second;
         }
 
+        [[nodiscard]] bool containsField(const std::string &field_key) const {
+            auto it = _fields.find(field_key);
+            if (it == _fields.end()) {
+                return false;
+            }
+            return true;
+        }
+
         [[nodiscard]] const std::map<std::string, Field>& fieldDefinitions() const {
             return _fields;
         }
