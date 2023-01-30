@@ -145,7 +145,7 @@ namespace mav {
             return Header<uint8_t*>(_backing_memory.data());
         }
 
-        void set(std::initializer_list<_initPairType> init) {
+        Message& set(std::initializer_list<_initPairType> init) {
             for (const auto &pair : init) {
                 if (auto* v_char = std::get_if<char>(&pair.var)) {
                     set(pair.key, *v_char);
@@ -161,6 +161,12 @@ namespace mav {
                     setFromString(pair.key, *v_string);
                 }
             }
+            return *this;
+        }
+
+        Message& operator()(std::initializer_list<_initPairType> init) {
+            this->set(std::move(init));
+            return *this;
         }
 
         template <typename T>

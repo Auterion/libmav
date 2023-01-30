@@ -197,7 +197,7 @@ namespace mav {
             return *(message_definition->second);
         }
 
-        Message createMessage(const std::string &message_name) {
+        Message create(const std::string &message_name) {
             auto message_definition = getMessageDefinition(message_name);
             if (!message_definition) {
                 throw std::out_of_range(StringFormat() << "No message of name " << message_name <<

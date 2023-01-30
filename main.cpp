@@ -11,8 +11,26 @@
 int main() {
     mav::MessageSet message_set{"/home/thomas/projects/mavlink/message_definitions/v1.0/common.xml"};
 
+    message_set.addFromXMLString(R""""(
+<mavlink>
+    <messages>
+        <message id="9912" name="TEMPERATURE_MEASUREMENT">
+            <field type="float" name="temperature">The measured temperature in degress C</field>
+        </message>
+    </messages>
+</mavlink>
+)"""");
 
-    auto message = message_set.createMessage("CHANGE_OPERATOR_CONTROL");
+
+    auto message = message_set.create("CHANGE_OPERATOR_CONTROL");
+
+    auto message11 = message_set.create("TEMPERATURE_MEASUREMENT");
+    message11["temperature"] = 13.3;
+
+    auto message12 = message_set.create("TEMPERATURE_MEASUREMENT")({
+        {"temperature", 13.3}
+    });
+
 
     std::string s = message["passkey"];
     std::cout << "PASSKEY BEFORE: " << s << std::endl;
@@ -20,7 +38,7 @@ int main() {
 
     message.setFromString("passkey", "BLA");
 
-    std::cout << "PASSKEY AFTER: " << message.getAsString("passkey") << std::endl;
+    std::cout << "PASSKEY AFTER: " << static_cast<std::string>(message["passkey"]) << std::endl;
 
 
     return 0;
