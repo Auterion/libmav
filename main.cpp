@@ -4,7 +4,7 @@
 #include "Connection.h"
 #include "Serial.h"
 #include <array>
-
+#include "MessageFieldIterator.h"
 
 
 
@@ -42,11 +42,13 @@ int main() {
 
 
     message.set({
-                        {"passkey", "Init list test"},
-                        {"numbers", std::vector{12, 2, 3}},
-                        {"ab", 2}
+                        {"passkey", "Init list test"}
     });
     std::cout << "PASSKEY INIT: " << static_cast<std::string>(message["passkey"]) << std::endl;
+
+    for (const auto &item : mav::FieldIterate(message)) {
+        std::cout << item.first << std::endl;
+    }
 
 
     return 0;

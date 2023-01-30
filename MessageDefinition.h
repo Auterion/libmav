@@ -239,10 +239,14 @@ namespace mav {
         [[nodiscard]] const Field& fieldForName(const std::string &field_key) const {
             auto it = _fields.find(field_key);
             if (it == _fields.end()) {
-                throw std::out_of_range(StringFormat() << "Field " << field_key << " does not exist in message "
+                throw std::out_of_range(StringFormat() << "Field \"" << field_key << "\" does not exist in message "
                                                        << _name << "." << StringFormat::end);
             }
             return it->second;
+        }
+
+        [[nodiscard]] const std::map<std::string, Field>& fieldDefinitions() const {
+            return _fields;
         }
 
         [[nodiscard]] std::vector<std::string> fieldNames() const {
@@ -250,6 +254,7 @@ namespace mav {
             for(auto const& item: _fields) {
                 keys.push_back(item.first);
             }
+
             return keys;
         }
     };
