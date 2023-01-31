@@ -48,15 +48,15 @@ namespace mav {
     private:
 
         std::array<uint8_t, MessageDefinition::MAX_MESSAGE_SIZE> _backing_memory{};
-        const MessageDefinition& _message_definition;
+        const MessageDefinition* _message_definition;
 
         explicit Message(const MessageDefinition &message_definition) :
-            _message_definition(message_definition) {
+            _message_definition(&message_definition) {
         }
 
         Message(const MessageDefinition &message_definition,
                 std::array<uint8_t, MessageDefinition::MAX_MESSAGE_SIZE> &&backing_memory) :
-                _message_definition(message_definition),
+                _message_definition(&message_definition),
                 _backing_memory(std::move(backing_memory)) {}
 
 
@@ -143,18 +143,18 @@ namespace mav {
         };
 
         [[nodiscard]] const MessageDefinition& type() const {
-            return _message_definition;
+            return *_message_definition;
         }
 
         [[nodiscard]] int id() const {
-            return _message_definition.id();
+            return _message_definition->id();
         }
 
         [[nodiscard]] const std::string& name() const {
-            return _message_definition.name();
+            return _message_definition->name();
         }
 
-        [[nodiscard]] Header<const uint8_t*> header() const {
+        [[nodiscard]] const Header<const uint8_t*> header() const {
             return Header<const uint8_t*>(_backing_memory.data());
         }
 
@@ -179,7 +179,7 @@ namespace mav {
 
         template <typename T>
         Message& set(const std::string &field_key, T v, int array_index = 0) {
-            auto field = _message_definition.fieldForName(field_key);
+            auto field = _message_definition->fieldForName(field_key);
 
             if constexpr(is_string<T>::value) {
                 setFromString(field_key, v);
@@ -209,7 +209,7 @@ namespace mav {
 
 
         Message& setFromString(const std::string &field_key, const std::string &v) {
-            auto field = _message_definition.fieldForName(field_key);
+            auto field = _message_definition->fieldForName(field_key);
             if (field.type.base_type != FieldType::BaseType::CHAR) {
                 throw std::runtime_error(StringFormat() << "Field " << field_key <<
                                                         " is not of type char" << StringFormat::end);
@@ -238,7 +238,7 @@ namespace mav {
             if constexpr(is_string<T>::value) {
                 return getAsString(field_key);
             } else if constexpr(is_iterable<T>::value) {
-                auto field = _message_definition.fieldForName(field_key);
+                auto field = _message_definition->fieldForName(field_key);
                 std::decay_t<T> ret_value;
 
                 // handle std::vector: Dynamically resize for convenience
@@ -256,7 +256,7 @@ namespace mav {
                 }
                 return ret_value;
             } else {
-                auto field = _message_definition.fieldForName(field_key);
+                auto field = _message_definition->fieldForName(field_key);
                 if (array_index < 0 || array_index >= field.type.size) {
                     throw std::out_of_range(StringFormat() << "Index " << array_index <<
                                                            " is out of range for field " << field_key << StringFormat::end);
@@ -266,7 +266,7 @@ namespace mav {
         }
 
         [[nodiscard]] std::string getAsString(const std::string &field_key) const {
-            auto field = _message_definition.fieldForName(field_key);
+            auto field = _message_definition->fieldForName(field_key);
             if (field.type.base_type != FieldType::BaseType::CHAR) {
                 throw std::runtime_error(StringFormat() << "Field " << field_key <<
                                                         " is not of type char" << StringFormat::end);
@@ -288,7 +288,7 @@ namespace mav {
 
 
         [[nodiscard]] NativeVariantType getAsNativeTypeInVariant(const std::string &field_key) const {
-            auto field = _message_definition.fieldForName(field_key);
+            auto field = _message_definition->fieldForName(field_key);
             if (field.type.size <= 1) {
                 switch (field.type.base_type) {
                     case FieldType::BaseType::CHAR: return get<char>(field_key);
@@ -326,7 +326,7 @@ namespace mav {
 
         [[nodiscard]] uint32_t finalize(uint8_t seq, const Identifier &sender) {
             auto last_nonzero = std::find_if(_backing_memory.rend() -
-                    MessageDefinition::HEADER_SIZE - _message_definition.maxPayloadSize(),
+                    MessageDefinition::HEADER_SIZE - _message_definition->maxPayloadSize(),
                     _backing_memory.rend(), [](const auto &v) {
                 return v != 0;
             });
@@ -342,10 +342,12 @@ namespace mav {
             header().seq() = seq;
             header().systemId() = sender.system_id;
             header().componentId() = sender.component_id;
-            header().msgId() = _message_definition.id();
+            header().msgId() = _message_definition->id();
 
             CRC crc;
-            crc.accumulate(_backing_memory.begin() + 1, _backing_memory.begin() + payload_size);
+            crc.accumulate(_backing_memory.begin() + 1, _backing_memory.begin() +
+                MessageDefinition::HEADER_SIZE + payload_size);
+            crc.accumulate(_message_definition->crcExtra());
             uint8_t* crc_destination = _backing_memory.data() + MessageDefinition::HEADER_SIZE + payload_size;
             serialize(crc.crc16(), crc_destination);
 

@@ -6,8 +6,13 @@
 #define MAV_CONNECTION_H
 
 #include <mutex>
+#include <unordered_map>
+#include <future>
+#include <utility>
 
 namespace mav {
+
+    using CallbackHandle = uint64_t;
 
     class TimeoutException : public std::runtime_error {
     public:
@@ -32,7 +37,9 @@ namespace mav {
         std::function<void(void)> _on_disconnect_callback;
 
         std::mutex _message_callback_mtx;
-        std::function<void(const Message &message)> _message_callback;
+
+        CallbackHandle _next_handle = 0;
+        std::unordered_map<CallbackHandle, std::function<void(const Message &message)>> _message_callbacks;
 
     public:
         Connection(const MessageSet &message_set, Identifier partner_id) :
@@ -50,10 +57,11 @@ namespace mav {
             if (message.header().msgId() == _heartbeat_message_id) {
                 _last_heartbeat_ms = millis();
             }
-
-            if (_message_callback) {
+            {
                 std::scoped_lock<std::mutex> lock(_message_callback_mtx);
-                _message_callback(message);
+                for (const auto& item : _message_callbacks) {
+                    item.second(message);
+                }
             }
         }
 
@@ -73,17 +81,89 @@ namespace mav {
 
         void send(Message &message) {
             if (millis() - _last_heartbeat_ms >= CONNECTION_TIMEOUT) {
-                throw TimeoutException{"Mavlink connection timed out"};
+                //throw TimeoutException{"Mavlink connection timed out"};
             }
             forceSend(message);
         }
 
         template<typename T>
-        void setMessageCallback(const T &on_message) {
+        CallbackHandle addMessageCallback(const T &on_message) {
             std::scoped_lock<std::mutex> lock(_message_callback_mtx);
-            _message_callback = on_message;
+            CallbackHandle handle = _next_handle;
+            _message_callbacks[handle] = on_message;
+            _next_handle++;
+            return handle;
         }
 
+        void removeMessageCallback(CallbackHandle handle) {
+            std::scoped_lock<std::mutex> lock(_message_callback_mtx);
+            _message_callbacks.erase(handle);
+        }
+
+
+        class Expectation {
+            friend Connection;
+        private:
+            CallbackHandle _handle;
+            std::shared_ptr<std::promise<Message>> _promise;
+        public:
+            Expectation(CallbackHandle handle, std::shared_ptr<std::promise<Message>> promise) : _handle(handle),
+            _promise(std::move(promise)) {}
+        };
+
+
+        [[nodiscard]] Expectation expect(int message_id, int source_id=mav::ANY_ID,
+                                         int component_id=mav::ANY_ID) {
+            auto prom = std::make_shared<std::promise<Message>>();
+            CallbackHandle handle = addMessageCallback(
+                    [prom, message_id, source_id, component_id](const Message &message) {
+                if (message.id() == message_id) {
+                    if ((source_id == mav::ANY_ID || message.header().systemId() == source_id) &&
+                            (component_id == mav::ANY_ID || message.header().componentId() == component_id)) {
+                        prom->set_value(message);
+                    }
+                }
+            });
+            return {handle, prom};
+        }
+
+        [[nodiscard]] inline Expectation expect(const std::string &message_name, int source_id=mav::ANY_ID,
+                                         int component_id=mav::ANY_ID) {
+            return expect(_message_set.idForMessage(message_name), source_id, component_id);
+        }
+
+        Message receive(const Expectation &expectation, int timeout_ms=-1) {
+            auto fut = expectation._promise->get_future();
+            if (timeout_ms >= 0) {
+                if (fut.wait_for(std::chrono::milliseconds(timeout_ms)) == std::future_status::timeout) {
+                    removeMessageCallback(expectation._handle);
+                    throw TimeoutException("Expected message timed out");
+                }
+            }
+            auto message = fut.get();
+            removeMessageCallback(expectation._handle);
+            return message;
+        }
+
+        Message inline receive(const std::string &message_type,
+                        int source_id=mav::ANY_ID,
+                        int component_id=mav::ANY_ID,
+                        int timeout_ms=-1) {
+            return receive(expect(message_type, source_id, component_id), timeout_ms);
+        }
+
+        Message inline receive(const std::string &message_type, int timeout_ms) {
+            return receive(message_type, mav::ANY_ID, mav::ANY_ID, timeout_ms);
+        }
+
+
+        Message inline receive(int message_id, int source_id=mav::ANY_ID, int component_id=mav::ANY_ID, int timeout_ms=-1) {
+            return receive(expect(message_id, source_id, component_id), timeout_ms);
+        }
+
+        Message inline receive(int message_id, int source_id=mav::ANY_ID, int timeout_ms=-1) {
+            return receive(message_id, mav::ANY_ID, mav::ANY_ID, timeout_ms);
+        }
     };
 
 };

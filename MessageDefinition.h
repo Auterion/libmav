@@ -14,12 +14,14 @@
 
 namespace mav {
 
+    constexpr int ANY_ID = -1;
+
     class Identifier {
     public:
-        const uint8_t system_id;
-        const uint8_t component_id;
+        const int system_id;
+        const int component_id;
 
-        Identifier(uint8_t system_id_, uint8_t component_id_) : system_id(system_id_), component_id(component_id_) {}
+        Identifier(int system_id_, int component_id_) : system_id(system_id_), component_id(component_id_) {}
 
         bool operator==(const Identifier &o) const {
             return system_id == o.system_id && component_id == o.component_id;
@@ -56,7 +58,7 @@ namespace mav {
     public:
         explicit Header(BackingMemoryPointerType backing_memory) : _backing_memory(backing_memory) {}
 
-        [[nodiscard]] inline uint8_t& magic(){
+        inline uint8_t& magic(){
             return _backing_memory[0];
         }
 
@@ -64,7 +66,7 @@ namespace mav {
             return _backing_memory[0];
         }
 
-        [[nodiscard]] inline uint8_t& len() {
+        inline uint8_t& len() {
             return _backing_memory[1];
         }
 
@@ -72,7 +74,7 @@ namespace mav {
             return _backing_memory[1];
         }
 
-        [[nodiscard]] inline uint8_t& incompatFlags() {
+        inline uint8_t& incompatFlags() {
             return _backing_memory[2];
         }
 
@@ -80,7 +82,7 @@ namespace mav {
             return _backing_memory[2];
         }
 
-        [[nodiscard]] inline uint8_t& compatFlags() {
+        inline uint8_t& compatFlags() {
             return _backing_memory[3];
         }
 
@@ -88,7 +90,7 @@ namespace mav {
             return _backing_memory[3];
         }
 
-        [[nodiscard]] inline uint8_t& seq() {
+        inline uint8_t& seq() {
             return _backing_memory[4];
         }
 
@@ -96,7 +98,7 @@ namespace mav {
             return _backing_memory[4];
         }
 
-        [[nodiscard]] inline uint8_t& systemId() {
+        inline uint8_t& systemId() {
             return _backing_memory[5];
         }
 
@@ -104,7 +106,7 @@ namespace mav {
             return _backing_memory[5];
         }
 
-        [[nodiscard]] inline uint8_t& componentId() {
+        inline uint8_t& componentId() {
             return _backing_memory[6];
         }
 
@@ -112,7 +114,7 @@ namespace mav {
             return _backing_memory[6];
         }
 
-        [[nodiscard]] inline _MsgId msgId() {
+        inline _MsgId msgId() {
             return _MsgId(_backing_memory + 7);
         }
 

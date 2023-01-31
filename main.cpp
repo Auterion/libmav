@@ -26,21 +26,21 @@ int main() {
 
 
     //auto physical = mav::Serial("/dev/ttyACM0", 57600);
-    auto physical = mav::TCP("10.41.1.1", 5790);
-    //auto physical = mav::UDPPassive(14550);
+    //auto physical = mav::TCP("10.41.1.1", 5790);
+    auto physical = mav::UDPPassive(14550);
     auto runtime = mav::NetworkRuntime({253, 1}, message_set, physical);
 
     auto connection = mav::Connection(message_set, {1, 1});
     runtime.addConnection(connection);
     int messages = 0;
-    connection.setMessageCallback([&message_set, &messages](const mav::Message &message) {
+    connection.addMessageCallback([&message_set, &messages](const mav::Message &message) {
         if (message.id() == message_set.idForMessage("HIGHRES_IMU")) {
             std::cout << "xacc: " << static_cast<float>(message["xacc"]) << std::endl;
 //            for (auto &name : message.type()->fieldNames()) {
 //                std::cout << "- " << name << std::endl;
 //            }
-        } else if (message.id() == message_set.idForMessage("HEARTBEAT")) {
-            std::cout << message.name() << std::endl;
+        } else if (message.id() == message_set.idForMessage("PARAM_VALUE")) {
+            std::cout << "PRAM_VALUE: " << static_cast<std::string>(message["param_id"]) << std::endl;
         }
         messages++;
     });
@@ -52,7 +52,23 @@ int main() {
 
     std::cout << "Received " << messages << " messages" << std::endl;
 
+    auto message = connection.receive("HEARTBEAT");
+    std::cout << "Received heartbeat..." << std::endl;
 
+    auto exp = connection.expect("PARAM_VALUE");
+    connection.send(message_set.create("PARAM_REQUEST_READ")({
+            {"target_system", 1},
+            {"target_component", 1},
+            {"param_id", "MC_PITCH_P"},
+            {"param_index", -1}
+    }));
+    auto response = connection.receive(exp);
+    std::cout << "Got param value for " << static_cast<std::string>(response["param_id"])
+        << " val: " << static_cast<float>(response["param_value"]) << std::endl;
+
+    while((mav::millis() - start) < 1000) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    };
 //    auto message = message_set.create("CHANGE_OPERATOR_CONTROL");
 //
 //    auto message11 = message_set.create("TEMPERATURE_MEASUREMENT");
