@@ -146,22 +146,22 @@ namespace mav {
         }
 
         Message inline receive(const std::string &message_type,
-                        int source_id=mav::ANY_ID,
-                        int component_id=mav::ANY_ID,
+                        int source_id,
+                        int component_id,
                         int timeout_ms=-1) {
             return receive(expect(message_type, source_id, component_id), timeout_ms);
         }
 
-        Message inline receive(const std::string &message_type, int timeout_ms) {
+        Message inline receive(const std::string &message_type, int timeout_ms=-1) {
             return receive(message_type, mav::ANY_ID, mav::ANY_ID, timeout_ms);
         }
 
 
-        Message inline receive(int message_id, int source_id=mav::ANY_ID, int component_id=mav::ANY_ID, int timeout_ms=-1) {
+        Message inline receive(int message_id, int source_id, int component_id, int timeout_ms=-1) {
             return receive(expect(message_id, source_id, component_id), timeout_ms);
         }
 
-        Message inline receive(int message_id, int source_id=mav::ANY_ID, int timeout_ms=-1) {
+        Message inline receive(int message_id, int timeout_ms=-1) {
             return receive(message_id, mav::ANY_ID, mav::ANY_ID, timeout_ms);
         }
     };

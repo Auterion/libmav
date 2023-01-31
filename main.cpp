@@ -55,16 +55,23 @@ int main() {
     auto message = connection.receive("HEARTBEAT");
     std::cout << "Received heartbeat..." << std::endl;
 
+
+
     auto exp = connection.expect("PARAM_VALUE");
     connection.send(message_set.create("PARAM_REQUEST_READ")({
             {"target_system", 1},
             {"target_component", 1},
-            {"param_id", "MC_PITCH_P"},
+            {"param_id", "SYS_AUTOSTART"},
             {"param_index", -1}
     }));
     auto response = connection.receive(exp);
+
+
     std::cout << "Got param value for " << static_cast<std::string>(response["param_id"])
-        << " val: " << static_cast<float>(response["param_value"]) << std::endl;
+        << " val: " << static_cast<int>(response["param_value"].floatUnpack()) << std::endl;
+
+
+
 
     while((mav::millis() - start) < 1000) {
         std::this_thread::sleep_for(std::chrono::milliseconds(10));

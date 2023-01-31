@@ -122,23 +122,40 @@ namespace mav {
             const std::string &_field_name;
             MessageType &_message;
             int _array_index;
+            bool _float_pack;
 
         public:
-            _accessorType(const std::string &field_name, MessageType &message, int array_index) :
-                _field_name(field_name), _message(message), _array_index(array_index) {}
+            _accessorType(const std::string &field_name, MessageType &message, int array_index, bool float_pack) :
+                _field_name(field_name), _message(message), _array_index(array_index), _float_pack(float_pack) {}
 
             template <typename T>
             void operator=(const T& val) {
-                _message.template set(_field_name, val, _array_index);
+                if (_float_pack) {
+                    _message.template setAsFloatPack<T>(_field_name, val, _array_index);
+                } else {
+                    _message.template set<T>(_field_name, val, _array_index);
+                }
             }
 
             template <typename T>
             operator T() const {
-                return _message.template get<T>(_field_name, _array_index);
+                if (_float_pack) {
+                    return _message.template getAsFloatUnpack<T>(_field_name, _array_index);
+                } else {
+                    return _message.template get<T>(_field_name, _array_index);
+                }
             }
 
             _accessorType operator[](int array_index) const {
-                return _accessorType{_field_name, _message, array_index};
+                return _accessorType{_field_name, _message, array_index, _float_pack};
+            }
+
+            _accessorType floatPack() const {
+                return _accessorType{_field_name, _message, _array_index, true};
+            }
+
+            _accessorType floatUnpack() const {
+                return _accessorType{_field_name, _message, _array_index, true};
             }
         };
 
@@ -207,6 +224,18 @@ namespace mav {
             }
         }
 
+        template <typename T>
+        Message& setAsFloatPack(const std::string &field_key, T v, int array_index = 0) {
+            if constexpr(is_string<T>::value) {
+                throw std::runtime_error("Cannot do float unpack to a string");
+            } else if constexpr(is_iterable<T>::value) {
+                throw std::runtime_error("Cannot do float unpack to an iterable");
+            } else {
+                set<float>(field_key, floatPack<T>(v), array_index);
+            }
+            return *this;
+        }
+
 
         Message& setFromString(const std::string &field_key, const std::string &v) {
             auto field = _message_definition->fieldForName(field_key);
@@ -265,6 +294,17 @@ namespace mav {
             }
         }
 
+        template <typename T>
+        [[nodiscard]] T getAsFloatUnpack(const std::string &field_key, int array_index = 0) const {
+            if constexpr(is_string<T>::value) {
+                throw std::runtime_error("Cannot do float unpack to a string");
+            } else if constexpr(is_iterable<T>::value) {
+                throw std::runtime_error("Cannot do float unpack to an iterable");
+            } else {
+                return floatUnpack<T>(get<float>(field_key, array_index));
+            }
+        }
+
         [[nodiscard]] std::string getAsString(const std::string &field_key) const {
             auto field = _message_definition->fieldForName(field_key);
             if (field.type.base_type != FieldType::BaseType::CHAR) {
@@ -279,11 +319,11 @@ namespace mav {
 
 
         _accessorType<const Message> operator[](const std::string &field_name) const {
-            return _accessorType<const Message>{field_name, *this, 0};
+            return _accessorType<const Message>{field_name, *this, 0, false};
         }
 
         _accessorType<Message> operator[](const std::string &field_name) {
-            return _accessorType<Message>{field_name, *this, 0};
+            return _accessorType<Message>{field_name, *this, 0, false};
         }
 
 

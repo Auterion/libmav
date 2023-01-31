@@ -163,6 +163,28 @@ namespace mav {
     }
 
 
+    template<typename A, typename B>
+    A _packUnpack(B b) {
+        union U {
+            A a;
+            B b;
+        };
+        U u;
+        u.b = b;
+        return u.a;
+    }
+
+    template<typename T>
+    T floatUnpack(float f) {
+        return _packUnpack<T, float>(f);
+    }
+
+    template<typename T>
+    float floatPack(T o) {
+        return _packUnpack<float, T>(o);
+    }
+
+
 }
 
 
