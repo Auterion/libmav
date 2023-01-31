@@ -8,6 +8,7 @@
 #include <utility>
 #include <filesystem>
 #include <memory>
+#include <optional>
 
 #include "MessageDefinition.h"
 #include "Message.h"
@@ -197,7 +198,7 @@ namespace mav {
             return *(message_definition->second);
         }
 
-        Message create(const std::string &message_name) {
+        [[nodiscard]] Message create(const std::string &message_name) const {
             auto message_definition = getMessageDefinition(message_name);
             if (!message_definition) {
                 throw std::out_of_range(StringFormat() << "No message of name " << message_name <<
@@ -206,6 +207,16 @@ namespace mav {
             return Message{message_definition.get()};
         }
 
+        [[nodiscard]] Message create(int message_id) const {
+            auto message_definition = getMessageDefinition(message_id);
+            if (!message_definition) {
+                throw std::out_of_range(StringFormat() << "No message of id " << message_id <<
+                    " in message set." << StringFormat::end);
+            }
+            return Message{message_definition.get()};
+        }
+
+
         [[nodiscard]] int idForMessage(const std::string &message_name) const {
             auto message_definition = _messages.find(message_name);
             if (message_definition == _messages.end()) {
@@ -213,6 +224,14 @@ namespace mav {
                                                        " in message set." << StringFormat::end);
             }
             return message_definition->second->id();
+        }
+
+        [[nodiscard]] bool contains(const std::string &message_name) const {
+            return _messages.find(message_name) != _messages.end();
+        }
+
+        [[nodiscard]] bool contains(int message_id) const {
+            return _message_ids.find(message_id) != _message_ids.end();
         }
 
 

@@ -32,20 +32,25 @@ int main() {
 
     auto connection = mav::Connection(message_set, {1, 1});
     runtime.addConnection(connection);
-
-    connection.setMessageCallback([&message_set](const mav::Message &message) {
+    int messages = 0;
+    connection.setMessageCallback([&message_set, &messages](const mav::Message &message) {
         if (message.id() == message_set.idForMessage("HIGHRES_IMU")) {
             std::cout << "xacc: " << static_cast<float>(message["xacc"]) << std::endl;
 //            for (auto &name : message.type()->fieldNames()) {
 //                std::cout << "- " << name << std::endl;
 //            }
-        } else {
+        } else if (message.id() == message_set.idForMessage("HEARTBEAT")) {
             std::cout << message.name() << std::endl;
         }
+        messages++;
     });
 
     uint64_t start = mav::millis();
-    while((mav::millis() - start) < 100000) {};
+    while((mav::millis() - start) < 1000) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    };
+
+    std::cout << "Received " << messages << " messages" << std::endl;
 
 
 //    auto message = message_set.create("CHANGE_OPERATOR_CONTROL");
