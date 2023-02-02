@@ -1,12 +1,12 @@
 #include <iostream>
-#include "MessageSet.h"
-#include "Network.h"
-#include "Connection.h"
-#include "Serial.h"
-#include "TCP.h"
-#include "UDPPassive.h"
+#include "include/mav/MessageSet.h"
+#include "include/mav/Network.h"
+#include "include/mav/Connection.h"
+#include "include/mav/Serial.h"
+#include "include/mav/TCP.h"
+#include "include/mav/UDPPassive.h"
 #include <array>
-#include "MessageFieldIterator.h"
+#include "include/mav/MessageFieldIterator.h"
 
 
 
@@ -68,7 +68,7 @@ int main() {
 
 
     std::cout << "Got param value for " << static_cast<std::string>(response["param_id"])
-        << " val: " << static_cast<int>(response["param_value"].floatUnpack()) << std::endl;
+        << " val: " << (response["param_value"].floatUnpack<int>()) << std::endl;
 
 
 

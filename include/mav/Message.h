@@ -83,7 +83,6 @@ namespace mav {
                 case FieldType::BaseType::INT64: return serialize(static_cast<int64_t>(v), target);
                 case FieldType::BaseType::FLOAT: return serialize(static_cast<float>(v), target);
                 case FieldType::BaseType::DOUBLE: return serialize(static_cast<double>(v), target);
-                case FieldType::BaseType::UNKNOWN: return;
             }
         }
 
@@ -102,9 +101,8 @@ namespace mav {
                 case FieldType::BaseType::INT64: return static_cast<T>(deserialize<int64_t>(b_ptr));
                 case FieldType::BaseType::FLOAT: return static_cast<T>(deserialize<float>(b_ptr));
                 case FieldType::BaseType::DOUBLE: return static_cast<T>(deserialize<double>(b_ptr));
-                case FieldType::BaseType::UNKNOWN: return T{};
             }
-            return T{};
+            throw std::runtime_error("Unknown base type"); // should never happen
         }
 
     public:
@@ -122,40 +120,37 @@ namespace mav {
             const std::string &_field_name;
             MessageType &_message;
             int _array_index;
-            bool _float_pack;
-
         public:
-            _accessorType(const std::string &field_name, MessageType &message, int array_index, bool float_pack) :
-                _field_name(field_name), _message(message), _array_index(array_index), _float_pack(float_pack) {}
+            _accessorType(const std::string &field_name, MessageType &message, int array_index) :
+                _field_name(field_name), _message(message), _array_index(array_index) {}
 
             template <typename T>
             void operator=(const T& val) {
-                if (_float_pack) {
-                    _message.template setAsFloatPack<T>(_field_name, val, _array_index);
-                } else {
-                    _message.template set<T>(_field_name, val, _array_index);
-                }
+                _message.template set<T>(_field_name, val, _array_index);
             }
 
             template <typename T>
             operator T() const {
-                if (_float_pack) {
-                    return _message.template getAsFloatUnpack<T>(_field_name, _array_index);
-                } else {
-                    return _message.template get<T>(_field_name, _array_index);
-                }
+                return _message.template get<T>(_field_name, _array_index);
+            }
+
+            template <typename T>
+            [[nodiscard]] T as() const {
+                return _message.template get<T>(_field_name, _array_index);
             }
 
             _accessorType operator[](int array_index) const {
-                return _accessorType{_field_name, _message, array_index, _float_pack};
+                return _accessorType{_field_name, _message, array_index};
             }
 
-            _accessorType floatPack() const {
-                return _accessorType{_field_name, _message, _array_index, true};
+            template <typename T>
+            void floatPack(T value) const {
+                _message.template setAsFloatPack<T>(_field_name, value, _array_index);
             }
 
-            _accessorType floatUnpack() const {
-                return _accessorType{_field_name, _message, _array_index, true};
+            template <typename T>
+            T floatUnpack() const {
+                return _message.template getAsFloatUnpack<T>(_field_name, _array_index);
             }
         };
 
@@ -195,7 +190,7 @@ namespace mav {
         }
 
         template <typename T>
-        Message& set(const std::string &field_key, T v, int array_index = 0) {
+        Message& set(const std::string &field_key, const T &v, int array_index = 0) {
             auto field = _message_definition->fieldForName(field_key);
 
             if constexpr(is_string<T>::value) {
@@ -220,12 +215,12 @@ namespace mav {
                 }
 
                 _writeSingle(field, v, array_index * field.type.baseSize());
-                return *this;
             }
+            return *this;
         }
 
         template <typename T>
-        Message& setAsFloatPack(const std::string &field_key, T v, int array_index = 0) {
+        Message& setAsFloatPack(const std::string &field_key, const T &v, int array_index = 0) {
             if constexpr(is_string<T>::value) {
                 throw std::runtime_error("Cannot do float unpack to a string");
             } else if constexpr(is_iterable<T>::value) {
@@ -240,7 +235,7 @@ namespace mav {
         Message& setFromString(const std::string &field_key, const std::string &v) {
             auto field = _message_definition->fieldForName(field_key);
             if (field.type.base_type != FieldType::BaseType::CHAR) {
-                throw std::runtime_error(StringFormat() << "Field " << field_key <<
+                throw std::invalid_argument(StringFormat() << "Field " << field_key <<
                                                         " is not of type char" << StringFormat::end);
             }
             if (v.size() > field.type.size) {
@@ -308,7 +303,7 @@ namespace mav {
         [[nodiscard]] std::string getAsString(const std::string &field_key) const {
             auto field = _message_definition->fieldForName(field_key);
             if (field.type.base_type != FieldType::BaseType::CHAR) {
-                throw std::runtime_error(StringFormat() << "Field " << field_key <<
+                throw std::invalid_argument(StringFormat() << "Field " << field_key <<
                                                         " is not of type char" << StringFormat::end);
             }
             int real_string_length = strnlen(_backing_memory.data() + field.offset, field.type.size);
@@ -319,13 +314,12 @@ namespace mav {
 
 
         _accessorType<const Message> operator[](const std::string &field_name) const {
-            return _accessorType<const Message>{field_name, *this, 0, false};
+            return _accessorType<const Message>{field_name, *this, 0};
         }
 
         _accessorType<Message> operator[](const std::string &field_name) {
-            return _accessorType<Message>{field_name, *this, 0, false};
+            return _accessorType<Message>{field_name, *this, 0};
         }
-
 
         [[nodiscard]] NativeVariantType getAsNativeTypeInVariant(const std::string &field_key) const {
             auto field = _message_definition->fieldForName(field_key);
@@ -342,7 +336,6 @@ namespace mav {
                     case FieldType::BaseType::INT64: return get<int64_t>(field_key);
                     case FieldType::BaseType::FLOAT: return get<float>(field_key);
                     case FieldType::BaseType::DOUBLE: return get<double>(field_key);
-                    case FieldType::BaseType::UNKNOWN: return -1;
                 }
             } else {
                 switch (field.type.base_type) {
@@ -357,7 +350,6 @@ namespace mav {
                     case FieldType::BaseType::INT64: return get<std::vector<int64_t>>(field_key);
                     case FieldType::BaseType::FLOAT: return get<std::vector<float>>(field_key);
                     case FieldType::BaseType::DOUBLE: return get<std::vector<double>>(field_key);
-                    case FieldType::BaseType::UNKNOWN: return -1;
                 }
             }
         }

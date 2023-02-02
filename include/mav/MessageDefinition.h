@@ -140,8 +140,7 @@ namespace mav {
             INT32,
             INT64,
             FLOAT,
-            DOUBLE,
-            UNKNOWN
+            DOUBLE
         };
 
         BaseType base_type;
@@ -160,7 +159,6 @@ namespace mav {
                 case BaseType::INT64: return 8;
                 case BaseType::FLOAT: return 4;
                 case BaseType::DOUBLE: return 8;
-                case BaseType::UNKNOWN: return 0;
             }
             return 0;
         }
@@ -178,7 +176,6 @@ namespace mav {
                 case BaseType::INT64: return "int64_t";
                 case BaseType::FLOAT: return "float";
                 case BaseType::DOUBLE: return "double";
-                case BaseType::UNKNOWN: return "";
             }
             return "";
         };

@@ -4,5 +4,7 @@ find_package(Threads REQUIRED)
 
 set(CMAKE_CXX_STANDARD 17)
 
-add_executable(libmavlink main.cpp SerialInterface.h)
+add_executable(libmavlink main.cpp include/mav/SerialInterface.h)
 target_link_libraries(libmavlink Threads::Threads)
+
+add_subdirectory(tests)

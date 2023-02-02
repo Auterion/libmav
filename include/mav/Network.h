@@ -10,6 +10,7 @@
 #include <array>
 #include <thread>
 #include <atomic>
+#include <iostream>
 #include "Connection.h"
 #include "utils.h"
 

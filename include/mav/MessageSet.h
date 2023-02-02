@@ -71,7 +71,7 @@ namespace mav {
             } else if (_isPrefix("double", field_type_string)) {
                 return {FieldType::BaseType::DOUBLE, size};
             }
-            return {FieldType::BaseType::UNKNOWN, 0};
+            throw std::runtime_error("Unknown field type: " + field_type_string);
         }
 
     public:

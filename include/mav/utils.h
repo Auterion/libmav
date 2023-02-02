@@ -5,6 +5,7 @@
 #include <sstream>
 #include <string_view>
 #include <chrono>
+#include <optional>
 
 #ifndef MAV_UTILS_H
 #define MAV_UTILS_H

@@ -9,6 +9,7 @@
 #include <unordered_map>
 #include <future>
 #include <utility>
+#include "MessageSet.h"
 
 namespace mav {
 
