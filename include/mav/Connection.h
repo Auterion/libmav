@@ -22,6 +22,12 @@ namespace mav {
 
     class Connection {
     private:
+
+        struct Callback {
+            std::function<void(const Message &message)> callback;
+            std::function<void(const std::exception_ptr& exception)> error_callback;
+        };
+
         static constexpr int CONNECTION_TIMEOUT = 5000;
 
         // connection properties
@@ -34,13 +40,11 @@ namespace mav {
 
         // callbacks
         std::function<void(Message &message)> _send_to_network_function;
-        std::function<void(void)> _on_connect_callback;
-        std::function<void(void)> _on_disconnect_callback;
 
         std::mutex _message_callback_mtx;
 
         CallbackHandle _next_handle = 0;
-        std::unordered_map<CallbackHandle, std::function<void(const Message &message)>> _message_callbacks;
+        std::unordered_map<CallbackHandle, Callback> _message_callbacks;
 
     public:
         Connection(const MessageSet &message_set, Identifier partner_id) :
@@ -63,7 +67,20 @@ namespace mav {
             {
                 std::scoped_lock<std::mutex> lock(_message_callback_mtx);
                 for (const auto& item : _message_callbacks) {
-                    item.second(message);
+                    const Callback &callback = item.second;
+                    if (callback.callback) {
+                        callback.callback(message);
+                    }
+                }
+            }
+        }
+
+        void consumeNetworkExceptionFromNetwork(const std::exception_ptr& exception) {
+            std::scoped_lock<std::mutex> lock(_message_callback_mtx);
+            for (const auto& item : _message_callbacks) {
+                const Callback &callback = item.second;
+                if (callback.error_callback) {
+                    callback.error_callback(exception);
                 }
             }
         }
@@ -89,13 +106,18 @@ namespace mav {
             forceSend(message);
         }
 
-        template<typename T>
-        CallbackHandle addMessageCallback(const T &on_message) {
+        template<typename T, typename E>
+        CallbackHandle addMessageCallback(const T &on_message, const E &on_error) {
             std::scoped_lock<std::mutex> lock(_message_callback_mtx);
             CallbackHandle handle = _next_handle;
-            _message_callbacks[handle] = on_message;
+            _message_callbacks[handle] = {on_message, on_error};
             _next_handle++;
             return handle;
+        }
+
+        template<typename T>
+        CallbackHandle addMessageCallback(const T &on_message) {
+            return addMessageCallback(on_message, nullptr);
         }
 
         void removeMessageCallback(CallbackHandle handle) {
@@ -126,6 +148,8 @@ namespace mav {
                         prom->set_value(message);
                     }
                 }
+            }, [prom](const std::exception_ptr& exception) {
+                prom->set_exception(exception);
             });
             return {handle, prom};
         }
@@ -142,6 +166,8 @@ namespace mav {
                     removeMessageCallback(expectation._handle);
                     throw TimeoutException("Expected message timed out");
                 }
+            } else {
+                fut.wait();
             }
             auto message = fut.get();
             removeMessageCallback(expectation._handle);

@@ -26,7 +26,7 @@ public:
         receive_queue_cv.notify_all();
     }
 
-    void fail() const {
+    void makeFailOnNextReceive() const {
         should_fail.store(true);
         receive_queue_cv.notify_all();
     }
@@ -157,7 +157,11 @@ TEST_CASE("Create network runtime") {
         CHECK_THROWS_AS(auto message = connection.receive(expectation, 100), TimeoutException);
     }
 
-//    SUBCASE("")
+    SUBCASE("Receive throws a NetworkError if the interface fails") {
+        auto expectation = connection.expect("HEARTBEAT");
+        interface.makeFailOnNextReceive();
+        CHECK_THROWS_AS(auto message = connection.receive(expectation), NetworkError);
+    }
 
 }
 

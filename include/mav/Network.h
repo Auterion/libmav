@@ -63,9 +63,6 @@ namespace mav {
                 // synchronize
                 while (!_checkMagicByte()) {}
 
-                //auto backing_memory = std::make_shared<std::vector<uint8_t>>(280);
-
-
                 backing_memory[0] = 0xFD;
                 _interface.receive(backing_memory.data() + 1, MessageDefinition::HEADER_SIZE -1);
                 Header header{backing_memory.data()};
@@ -108,6 +105,7 @@ namespace mav {
         MessageSet& _message_set;
         StreamParser _parser;
         Identifier _own_id;
+        std::mutex _connections_mutex;
         std::list<std::reference_wrapper<Connection>> _connections;
         uint8_t _seq = 0;
 
@@ -117,20 +115,21 @@ namespace mav {
             _interface.send(message.data(), wire_length);
         }
 
-        void _heartbeat_thread() {
-
-        }
 
         void _receive_thread_function() {
             while (!_should_terminate.load()) {
                 try {
                     auto message = _parser.next();
+                    std::lock_guard<std::mutex> lock(_connections_mutex);
                     for (auto& connection : _connections) {
                         connection.get().consumeMessageFromNetwork(message);
                     }
                 } catch (NetworkError &e) {
-                    std::cerr << "Network failed " << e.what() << std::endl;
                     _should_terminate.store(true);
+                    // Spread the network error to all connections
+                    for (auto& connection : _connections) {
+                        connection.get().consumeNetworkExceptionFromNetwork(std::make_exception_ptr(e));
+                    }
                 } catch (NetworkInterfaceInterrupt &e) {
                     _should_terminate.store(true);
                 }
@@ -154,6 +153,7 @@ namespace mav {
             connection.template setSendMessageToNetworkFunc([this](Message &message){
                 this->_sendMessage(message);
             });
+            std::lock_guard<std::mutex> lock(_connections_mutex);
             _connections.emplace_back(connection);
         }
 
