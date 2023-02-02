@@ -1,12 +1,12 @@
 #include <iostream>
-#include "include/mav/MessageSet.h"
-#include "include/mav/Network.h"
-#include "include/mav/Connection.h"
-#include "include/mav/Serial.h"
-#include "include/mav/TCP.h"
-#include "include/mav/UDPPassive.h"
+#include "mav/MessageSet.h"
+#include "mav/Network.h"
+#include "mav/Connection.h"
+#include "mav/Serial.h"
+#include "mav/TCP.h"
+#include "mav/UDPPassive.h"
 #include <array>
-#include "include/mav/MessageFieldIterator.h"
+#include "mav/MessageFieldIterator.h"
 
 
 
@@ -22,7 +22,9 @@ int main() {
     </messages>
 </mavlink>
 )"""");
-
+    auto message11 = message_set.create("TEMPERATURE_MEASUREMENT");
+    message11["temperature"] = 13.3;
+    message11.finalize(0, {1, 1});
 
 
     //auto physical = mav::Serial("/dev/ttyACM0", 57600);
@@ -78,8 +80,7 @@ int main() {
     };
 //    auto message = message_set.create("CHANGE_OPERATOR_CONTROL");
 //
-//    auto message11 = message_set.create("TEMPERATURE_MEASUREMENT");
-//    message11["temperature"] = 13.3;
+
 //
 //    auto message12 = message_set.create("TEMPERATURE_MEASUREMENT")({
 //                                                                           {"temperature", 13.3}

@@ -30,6 +30,10 @@ namespace mav {
         bool operator!=(const Identifier &o) const {
             return system_id != o.system_id || component_id != o.component_id;
         }
+
+        bool filter(const Identifier &o) const {
+            return (system_id == ANY_ID || system_id == o.system_id) && (component_id == ANY_ID || component_id == o.component_id);
+        }
     };
 
     template <typename BackingMemoryPointerType>

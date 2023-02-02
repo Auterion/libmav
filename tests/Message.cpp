@@ -115,6 +115,37 @@ TEST_CASE("Message set creation") {
         CHECK(static_cast<std::vector<int32_t>>(message["int32_arr_field"]) == std::vector<int32_t>{1, 2, 3});
     }
 
+    SUBCASE("Can set values with initializer list API") {
+        message.set({
+            {"uint8_field", 0x12},
+            {"int8_field", 0x12},
+            {"uint16_field", 0x1234},
+            {"int16_field", 0x1234},
+            {"uint32_field", 0x12345678},
+            {"int32_field", 0x12345678},
+            {"uint64_field", 0x1234567890ABCDEF},
+            {"int64_field", 0x1234567890ABCDEF},
+            {"double_field", 0.123456789},
+            {"float_field", 0.123456789},
+            {"char_arr_field", "Hello World!"},
+            {"float_arr_field", std::vector<float>{1.0, 2.0, 3.0}},
+            {"int32_arr_field", std::vector<int32_t>{1, 2, 3}}});
+
+        CHECK(static_cast<uint8_t>(message["uint8_field"]) == 0x12);
+        CHECK(static_cast<int8_t>(message["int8_field"]) == 0x12);
+        CHECK(static_cast<uint16_t>(message["uint16_field"]) == 0x1234);
+        CHECK(static_cast<int16_t>(message["int16_field"]) == 0x1234);
+        CHECK(static_cast<uint32_t>(message["uint32_field"]) == 0x12345678);
+        CHECK(static_cast<int32_t>(message["int32_field"]) == 0x12345678);
+        CHECK(static_cast<uint64_t>(message["uint64_field"]) == 0x1234567890ABCDEF);
+        CHECK(static_cast<int64_t>(message["int64_field"]) == 0x1234567890ABCDEF);
+        CHECK(static_cast<double>(message["double_field"]) == doctest::Approx(0.123456789));
+        CHECK(static_cast<float>(message["float_field"]) == doctest::Approx(0.123456789));
+        CHECK(static_cast<std::string>(message["char_arr_field"]) == "Hello World!");
+        CHECK(static_cast<std::vector<float>>(message["float_arr_field"]) == std::vector<float>{1.0, 2.0, 3.0});
+        CHECK(static_cast<std::vector<int32_t>>(message["int32_arr_field"]) == std::vector<int32_t>{1, 2, 3});
+    }
+
     SUBCASE("Can assign std::string to char array field") {
         std::string str = "Hello World!";
         message.set("char_arr_field", str);

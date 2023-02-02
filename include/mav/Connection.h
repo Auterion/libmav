@@ -48,9 +48,11 @@ namespace mav {
             _heartbeat_message_id = _message_set.idForMessage("HEARTBEAT");
         }
 
+        explicit Connection(const MessageSet &message_set) : Connection(message_set, {mav::ANY_ID, mav::ANY_ID}) {}
+
         void consumeMessageFromNetwork(const Message& message) {
             // This connection is not concerned about messages from this partner. Ignore.
-            if (message.header().source() != _partner_id) {
+            if (!message.header().source().filter(_partner_id)) {
                 return;
             }
 
