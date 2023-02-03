@@ -55,17 +55,17 @@ TEST_CASE("Message field iterator") {
     SUBCASE("Can iterate through fields of message") {
 
 
-        std::list<std::pair<std::string, NativeVariantType>> expect_set = {
-                {"uint8_field", 1},
-                {"int8_field", 2},
-                {"uint16_field", 3},
-                {"int16_field", 4},
-                {"uint32_field", 5},
-                {"int32_field", 6},
-                {"uint64_field", 7},
-                {"int64_field", 8},
-                {"double_field", 9.0},
-                {"float_field", 10.0},
+        std::map<std::string, NativeVariantType> expect_set = {
+                {"uint8_field", static_cast<uint8_t>(1)},
+                {"int8_field", static_cast<int8_t>(2)},
+                {"uint16_field", static_cast<uint16_t>(3)},
+                {"int16_field", static_cast<int16_t>(4)},
+                {"uint32_field", static_cast<uint32_t>(5)},
+                {"int32_field", static_cast<int32_t>(6)},
+                {"uint64_field", static_cast<uint64_t>(7)},
+                {"int64_field", static_cast<int64_t>(8)},
+                {"double_field", static_cast<double>(9.0)},
+                {"float_field", static_cast<float>(10.0)},
                 {"char_arr_field", "Hello World"},
                 {"float_arr_field", std::vector<float>{1.0, 2.0, 3.0}},
                 {"int32_arr_field", std::vector<int32_t>{4, 5, 6}}
@@ -76,8 +76,9 @@ TEST_CASE("Message field iterator") {
         for (const auto& [key, value] : FieldIterate(message)) {
             REQUIRE(expect_set.size() > 0);
 
-            auto expect = std::find(expect_set.begin(), expect_set.end(), std::make_pair(key, value));
+            auto expect = expect_set.find(key);
             CHECK(expect != expect_set.end());
+            CHECK(value == expect->second);
         }
     }
 
