@@ -6,6 +6,7 @@ add_executable(tests
         Message.cpp
         MessageDefinition.cpp
         Network.cpp
+        MessageFieldIterator.cpp
         )
 
 add_test(NAME tests COMMAND tests)
