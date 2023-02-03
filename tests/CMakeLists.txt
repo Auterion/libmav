@@ -13,4 +13,4 @@ add_test(NAME tests COMMAND tests)
 
 target_compile_options(tests PRIVATE -O0 -g --coverage)
 target_link_options(tests PRIVATE --coverage)
-target_include_directories(tests PRIVATE ..)
+target_include_directories(tests PRIVATE ../include)

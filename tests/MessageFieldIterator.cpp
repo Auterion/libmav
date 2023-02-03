@@ -4,8 +4,8 @@
 
 #include <list>
 #include "doctest.h"
-#include "include/mav/MessageSet.h"
-#include "include/mav/MessageFieldIterator.h"
+#include "mav/MessageSet.h"
+#include "mav/MessageFieldIterator.h"
 
 using namespace mav;
 

@@ -3,8 +3,8 @@
 //
 
 #include "doctest.h"
-#include "include/mav/MessageSet.h"
-#include "include/mav/Message.h"
+#include "mav/MessageSet.h"
+#include "mav/Message.h"
 
 using namespace mav;
 

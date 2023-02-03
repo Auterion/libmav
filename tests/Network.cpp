@@ -4,8 +4,8 @@
 
 
 #include "doctest.h"
-#include "include/mav/Message.h"
-#include "include/mav/Network.h"
+#include "mav/Message.h"
+#include "mav/Network.h"
 
 using namespace mav;
 using namespace std::string_literals;

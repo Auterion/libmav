@@ -3,7 +3,7 @@
 //
 #include <filesystem>
 #include "doctest.h"
-#include "include/mav/MessageSet.h"
+#include "mav/MessageSet.h"
 
 using namespace mav;
 
