@@ -1,0 +1,15 @@
+name: Tests
+
+on:
+  - push
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Build tests
+        run: mkdir build && cd build && cmake .. && make tests
+      - name: Run tests
+        run: ./tests/tests
+        working-directory: build
