@@ -94,7 +94,7 @@ namespace mav {
         }
 
 
-        void parse(std::map<std::string, int> &out_enum,
+        void parse(std::map<std::string, uint64_t> &out_enum,
                    std::map<std::string, std::shared_ptr<const MessageDefinition>> &out_messages,
                    std::map<int, std::shared_ptr<const MessageDefinition>> &out_message_ids) {
 
@@ -111,6 +111,24 @@ namespace mav {
                 auto sub_parser = XMLParser::forFile(
                         (std::filesystem::path{_root_xml_folder_path} / include_name).string());
                 sub_parser.parse(out_enum, out_messages, out_message_ids);
+            }
+
+            auto enums_node = root_node->first_node("enums");
+            if (enums_node) {
+                for (auto enum_node = enums_node->first_node();
+                    enum_node != nullptr;
+                    enum_node = enum_node->next_sibling()) {
+
+                    for (auto entry = enum_node->first_node();
+                        entry != nullptr;
+                        entry = entry->next_sibling()) {
+                        if (std::string_view("entry") == entry->name()) {
+                            auto entry_name = entry->first_attribute("name")->value();
+                            uint64_t value = std::stoul(entry->first_attribute("value")->value());
+                            out_enum[entry_name] = value;
+                        }
+                    }
+                }
             }
 
             auto messages_node = root_node->first_node("messages");
@@ -158,9 +176,10 @@ namespace mav {
         }
     };
 
+
     class MessageSet {
     private:
-        std::map<std::string, int> _enums;
+        std::map<std::string, uint64_t> _enums;
         std::map<std::string, std::shared_ptr<const MessageDefinition>> _messages;
         std::map<int, std::shared_ptr<const MessageDefinition>> _message_ids;
 
@@ -216,6 +235,17 @@ namespace mav {
             return Message{message_definition.get()};
         }
 
+        [[nodiscard]] uint64_t enum_for(const std::string &key) const {
+            auto res = _enums.find(key);
+            if (res == _enums.end()) {
+                throw std::out_of_range(StringFormat() << "Enum " << key << " not in message set" << StringFormat::end);
+            }
+            return res->second;
+        }
+
+        [[nodiscard]] uint64_t e(const std::string &key) const {
+            return enum_for(key);
+        }
 
         [[nodiscard]] int idForMessage(const std::string &message_name) const {
             auto message_definition = _messages.find(message_name);
