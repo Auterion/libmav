@@ -1,3 +1,13 @@
+//
+// Created by Thomas Debrunner on 05.02.23.
+//
+
+#ifndef LIBMAVLINK_MINIMAL_H
+#define LIBMAVLINK_MINIMAL_H
+
+#include <string>
+
+const char minimal_xml[] = R""""(
 <?xml version="1.0"?>
 <mavlink>
   <version>3</version>
@@ -741,3 +751,8 @@
     </message>
   </messages>
 </mavlink>
+
+)"""";
+
+
+#endif //LIBMAVLINK_MINIMAL_H

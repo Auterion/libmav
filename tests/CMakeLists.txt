@@ -7,7 +7,7 @@ add_executable(tests
         MessageDefinition.cpp
         Network.cpp
         MessageFieldIterator.cpp
-        )
+        minimal.h)
 
 add_test(NAME tests COMMAND tests)
 

@@ -63,7 +63,7 @@ namespace mav {
         template <typename T>
         void _writeSingle(const Field &field, const T &v, int in_field_offset = 0) {
             // make sure that we only have simplistic base types here
-            static_assert(is_any<T,
+            static_assert(is_any<std::decay_t<T>, short, int, long, unsigned int, unsigned long,
                     char, uint8_t, int8_t, uint16_t, int16_t, uint32_t, int32_t, uint64_t, int64_t, float, double
             >::value, "Can not set this data type to a mavlink message field.");
             // We serialize to the data type given in the field definition, not the data type used in the API.

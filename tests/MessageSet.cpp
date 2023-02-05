@@ -4,11 +4,27 @@
 #include <filesystem>
 #include "doctest.h"
 #include "mav/MessageSet.h"
+#include "minimal.h"
+#include <cstdio>
+#include <fstream>
 
 using namespace mav;
 
+std::string dump_minimal_xml() {
+    // write temporary file
+    auto temp_path = std::filesystem::temp_directory_path();
+    auto xml_file = temp_path / "minimal.xml";
+    std::ofstream out(xml_file);
+    out << minimal_xml;
+    out.close();
+    return xml_file;
+}
+
 TEST_CASE("Message set creation") {
-    MessageSet message_set{std::filesystem::current_path() / "tests/minimal.xml"};
+
+    auto file_name = dump_minimal_xml();
+    MessageSet message_set{file_name};
+    std::remove(file_name.c_str());
 
     CHECK(message_set.size() == 2);
 
@@ -50,7 +66,9 @@ TEST_CASE("Message set creation") {
 }
 
 TEST_CASE("Create messages from set") {
-    MessageSet message_set{std::filesystem::current_path() / "tests/minimal.xml"};
+    auto file_name = dump_minimal_xml();
+    MessageSet message_set{file_name};
+    std::remove(file_name.c_str());
 
     REQUIRE(message_set.contains("HEARTBEAT"));
     SUBCASE("Can create message from name") {
