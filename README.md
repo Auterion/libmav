@@ -103,5 +103,73 @@ auto connection = libmav::Connection(message_set);
 runtime.addConnection(connection);
 ```
 
-The network runtime will throw `libmav::NetworkError` if network connection fails.
+The classes will throw `libmav::NetworkError` if connection fails.
 
+### Sending / receiving messages
+
+#### Sync / promise API
+
+The easiest way to send receive messages is using the synchronous API:
+
+```C++
+
+// create a message
+auto message = message_set.create("PARAM_REQUEST_READ") ({
+        {"target_system", 1},
+        {"target_system", 1},
+        {"param_id", "SYS_AUTOSTART"},
+        {"param_index", -1}
+});
+// send a message
+conection.send(message);
+
+// ⚠️ Potential race condition here! (read below)
+
+// receive a message, with a 1s timeout
+auto response = connection.receive("PARAM_VALUE", 1000);
+```
+
+The call to receive is blocking.
+Note that the code above has a potential race condition. To start receiving
+for a response before the request goes out, you can do this:
+
+```C++
+// create a message
+auto message = message_set.create("PARAM_REQUEST_READ") ({
+    {"target_system", 1},
+    {"target_system", 1},
+    {"param_id", "SYS_AUTOSTART"},
+    {"param_index", -1}
+});
+
+// Already watch for the answer
+auto expectation = connection.expect("PARAM_VALUE");
+// send the message
+conection.send(message);
+// Wait for the answer, with a 1s timeout
+auto response = connection.receive(expecation, 1000);
+```
+
+#### Receive using a callback
+
+Alternatively, you can also register regular callbacks
+
+```C++
+// adding a callback
+auto callback_handle = connection.addMessageCallback(
+        [](const libmav::Message& message) {
+            std::cout << message.name() << std::endl;
+        });
+
+// adding a callback with an error handler
+auto callback_handle = connection.addMessageCallback(
+        [](const libmav::Message& message) {
+            std::cout << message.name() << std::endl;
+        }, 
+        [](const std::exception_ptr& exception) {
+            std::cout << "Exception" << std::endl;
+        });
+
+// removing a callback
+connection.removeMessageCallback(callback_handle);
+```

@@ -11,7 +11,7 @@
 
 
 int main() {
-    mav::MessageSet message_set{"/home/thomas/projects/mavlink/message_definitions/v1.0/common.xml"};
+    mav::MessageSet message_set{"/Users/thomas/projects/mavlink/message_definitions/v1.0/common.xml"};
 
     message_set.addFromXMLString(R""""(
 <mavlink>
@@ -26,6 +26,7 @@ int main() {
     message11["temperature"] = 13.3;
     message11.finalize(0, {1, 1});
 
+    std::cout << "MAV_SYS_STATUS_SENSOR_SATCOM " << message_set.e("MAV_SYS_STATUS_SENSOR_SATCOM") << std::endl;
 
     //auto physical = mav::Serial("/dev/ttyACM0", 57600);
     //auto physical = mav::TCP("10.41.1.1", 5790);

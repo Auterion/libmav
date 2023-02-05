@@ -193,7 +193,6 @@ namespace mav {
         int offset;
     };
 
-
     // Forward declared builder class
     class MessageDefinitionBuilder;
 
