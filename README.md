@@ -1,3 +1,5 @@
+![build badge](https://github.com/ThomasDebrunner/libmav/actions/workflows/test.yml/badge.svg)
+
 # libmav
 
 The better mavlink library.
