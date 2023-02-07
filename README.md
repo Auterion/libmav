@@ -12,12 +12,11 @@ networks and several of the mavlink internal protocols.
 
 ### What's the advantage?
 
-There are many mavlink libraries out there. The main advantages of this library over
-the others are:
+There are many mavlink libraries out there. The main advantages of this library over others are:
 
-- Runtime defined message set. No need to recompile on message set change
-- Native python bindings for C++ code. Faster than pure python
-- Header-only, no dependencies, C++ 17, >90% test coverage
+- **Runtime defined message set**. No need to recompile on message set change
+- **Native python bindings** for C++ code. Faster than pure python. *Coming soon*
+- **Header-only, no dependencies**, C++ 17, >90% test coverage
 
 ## How to install
 
@@ -88,7 +87,7 @@ Libmav has classes for the following protocols:
 - Serial
 - TCP
 - UDP Passive *Respond to anybody that already sends us data*
-- ~UDP Active *Initiate sending data to somebody, only accept data from there*~
+- ~UDP Active *Initiate sending data to somebody, only accept data from there*~ *Coming soon*
 
 Libmav does not do any threading, except for the `NetworkRuntime` class.
 The `NetworkRuntime` class spawns a single thread to drive the receive end
