@@ -1,5 +1,7 @@
 ![build badge](https://github.com/ThomasDebrunner/libmav/actions/workflows/test.yml/badge.svg)
 
+⚠️ This is still early development. The API may not be stable yet. ⚠️
+
 # libmav
 
 The better mavlink library.
@@ -86,7 +88,7 @@ Libmav has classes for the following protocols:
 - Serial
 - TCP
 - UDP Passive *Respond to anybody that already sends us data*
-- UDP Active *Initiate sending data to somebody, only accept data from there*
+- ~UDP Active *Initiate sending data to somebody, only accept data from there*~
 
 Libmav does not do any threading, except for the `NetworkRuntime` class.
 The `NetworkRuntime` class spawns a single thread to drive the receive end
