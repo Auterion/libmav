@@ -11,6 +11,9 @@
 #include <thread>
 #include <atomic>
 #include <iostream>
+#include <memory>
+#include <utility>
+#include <future>
 #include "Connection.h"
 #include "utils.h"
 
@@ -34,17 +37,17 @@ namespace mav {
     class NetworkInterface {
     public:
         virtual void close() const = 0;
-        virtual void send(const uint8_t* data, uint32_t size) = 0;
-        virtual void receive(uint8_t* destination, uint32_t size) = 0;
+        virtual void send(const uint8_t* data, uint32_t size, ConnectionPartner partner) = 0;
+        virtual void flush() = 0;
+        virtual ConnectionPartner receive(uint8_t* destination, uint32_t size) = 0;
     };
-
 
 
     class StreamParser {
     private:
 
         NetworkInterface& _interface;
-        MessageSet& _message_set;
+        const MessageSet& _message_set;
 
         [[nodiscard]] bool _checkMagicByte() const {
             uint8_t v;
@@ -53,7 +56,7 @@ namespace mav {
         }
 
     public:
-        StreamParser(MessageSet &message_set, NetworkInterface &interface) :
+        StreamParser(const MessageSet &message_set, NetworkInterface &interface) :
         _interface(interface), _message_set(message_set) {}
 
         [[nodiscard]] Message next() const {
@@ -69,7 +72,7 @@ namespace mav {
                 const bool message_is_signed = header.incompatFlags() & 0x01;
                 const int wire_length = MessageDefinition::HEADER_SIZE + header.len() + MessageDefinition::CHECKSUM_SIZE +
                                   (message_is_signed ? MessageDefinition::SIGNATURE_SIZE : 0);
-                _interface.receive(backing_memory.data() + MessageDefinition::HEADER_SIZE,
+                auto partner = _interface.receive(backing_memory.data() + MessageDefinition::HEADER_SIZE,
                                    wire_length - MessageDefinition::HEADER_SIZE);
                 const int crc_offset = MessageDefinition::HEADER_SIZE + header.len();
 
@@ -90,7 +93,7 @@ namespace mav {
                     continue;
                 }
 
-                return Message::_instantiateFromMemory(definition, std::move(backing_memory));
+                return Message::_instantiateFromMemory(definition, partner, std::move(backing_memory));
             }
         }
     };
@@ -102,17 +105,38 @@ namespace mav {
         std::thread _receive_thread;
 
         NetworkInterface& _interface;
-        MessageSet& _message_set;
+        const MessageSet& _message_set;
         StreamParser _parser;
         Identifier _own_id;
         std::mutex _connections_mutex;
-        std::list<std::reference_wrapper<Connection>> _connections;
+        std::unordered_map<ConnectionPartner, std::shared_ptr<Connection>, _ConnectionPartnerHash> _connections;
+        std::unique_ptr<std::promise<std::shared_ptr<Connection>>> _first_connection_promise = nullptr;
         uint8_t _seq = 0;
 
+        std::function<void(const std::shared_ptr<Connection>&)> _on_connection;
 
-        void _sendMessage(Message &message) {
+
+        void _sendMessage(Message &message, const ConnectionPartner &partner) {
             int wire_length = static_cast<int>(message.finalize(_seq++, _own_id));
-            _interface.send(message.data(), wire_length);
+            _interface.send(message.data(), wire_length, partner);
+        }
+
+        std::shared_ptr<Connection> _addConnection(const ConnectionPartner partner) {
+            auto new_connection = std::make_shared<Connection>(_message_set, partner);
+            new_connection->template setSendMessageToNetworkFunc([this, partner](Message &message){
+                this->_sendMessage(message, partner);
+            });
+
+            _connections.insert({partner, new_connection});
+            if (_on_connection) {
+                _on_connection(new_connection);
+            }
+
+            if (_first_connection_promise) {
+                _first_connection_promise->set_value(new_connection);
+                _first_connection_promise = nullptr;
+            }
+            return new_connection;
         }
 
 
@@ -121,14 +145,19 @@ namespace mav {
                 try {
                     auto message = _parser.next();
                     std::lock_guard<std::mutex> lock(_connections_mutex);
-                    for (auto& connection : _connections) {
-                        connection.get().consumeMessageFromNetwork(message);
+                    // get correct connection for this message
+                    auto connection_entry = _connections.find(message.source());
+                    if (connection_entry == _connections.end()) {
+                        // we do not have a connection for this message, create one
+                        auto connection = _addConnection(message.source());
+                    } else {
+                        connection_entry->second->consumeMessageFromNetwork(message);
                     }
                 } catch (NetworkError &e) {
                     _should_terminate.store(true);
                     // Spread the network error to all connections
                     for (auto& connection : _connections) {
-                        connection.get().consumeNetworkExceptionFromNetwork(std::make_exception_ptr(e));
+                        connection.second->consumeNetworkExceptionFromNetwork(std::make_exception_ptr(e));
                     }
                 } catch (NetworkInterfaceInterrupt &e) {
                     _should_terminate.store(true);
@@ -138,7 +167,7 @@ namespace mav {
 
 
     public:
-        NetworkRuntime(const Identifier &own_id, MessageSet &message_set, NetworkInterface &interface) :
+        NetworkRuntime(const Identifier &own_id, const MessageSet &message_set, NetworkInterface &interface) :
                 _own_id(own_id), _message_set(message_set),
                 _interface(interface), _parser(_message_set, _interface) {
 
@@ -149,12 +178,28 @@ namespace mav {
             };
         }
 
-        void addConnection(Connection &connection) {
-            connection.template setSendMessageToNetworkFunc([this](Message &message){
-                this->_sendMessage(message);
-            });
-            std::lock_guard<std::mutex> lock(_connections_mutex);
-            _connections.emplace_back(connection);
+        NetworkRuntime(const MessageSet &message_set, NetworkInterface &interface) :
+                NetworkRuntime({LIBMAV_DEFAULT_ID, LIBMAV_DEFAULT_ID},
+                               message_set, interface) {}
+
+        void onConnection(std::function<void(const std::shared_ptr<Connection>&)> on_connection) {
+            _on_connection = std::move(on_connection);
+        }
+
+        std::shared_ptr<Connection> awaitConnection(int timeout_ms = -1) {
+            {
+                std::lock_guard<std::mutex> lock(_connections_mutex);
+                if (!_connections.empty()) {
+                    return _connections.begin()->second;
+                }
+            }
+            _first_connection_promise = std::make_unique<std::promise<std::shared_ptr<Connection>>>();
+            if (timeout_ms >= 0) {
+                if (_first_connection_promise->get_future().wait_for(std::chrono::milliseconds(timeout_ms)) == std::future_status::timeout) {
+                    throw TimeoutException("Timeout while waiting for first connection");
+                }
+            }
+            return _first_connection_promise->get_future().get();
         }
 
         void stop() {

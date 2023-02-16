@@ -13,9 +13,11 @@ using namespace std::string_literals;
 class DummyInterface : public NetworkInterface {
 private:
     std::string receive_queue;
+    ConnectionPartner next_receive_partner;
     std::mutex receive_queue_mutex;
     mutable std::condition_variable receive_queue_cv;
     std::string send_sponge;
+    ConnectionPartner last_send_partner;
     mutable std::atomic_bool should_interrupt{false};
     mutable std::atomic_bool should_fail{false};
 
@@ -34,11 +36,12 @@ public:
     void close() const override {
         stop();
     }
-    void send(const uint8_t *data, uint32_t size) override {
+    void send(const uint8_t *data, uint32_t size, ConnectionPartner partner) override {
         send_sponge.append(reinterpret_cast<const char *>(data), size);
+        last_send_partner = partner;
     }
 
-    void receive(uint8_t *destination, uint32_t size) override {
+    ConnectionPartner receive(uint8_t *destination, uint32_t size) override {
         std::unique_lock<std::mutex> lock(receive_queue_mutex);
         if (receive_queue.size() < size) {
             receive_queue_cv.wait(lock, [this, size] {
@@ -52,6 +55,10 @@ public:
         }
         std::copy(receive_queue.begin(), receive_queue.begin() + size, destination);
         receive_queue.erase(0, size);
+        return next_receive_partner;
+    }
+
+    void flush() override {
     }
 
     virtual ~DummyInterface() {
@@ -63,25 +70,25 @@ public:
     }
 
     void flushReceiveQueue() {
+        std::unique_lock<std::mutex> lock(receive_queue_mutex);
         receive_queue.clear();
     }
 
-    bool sendSpongeEmpty() const {
-        return send_sponge.empty();
+    void reset() {
+        flushSendSponge();
+        flushReceiveQueue();
     }
 
-    bool receiveQueueEmpty() const {
-        return receive_queue.empty();
-    }
-
-    void addToReceiveQueue(const std::string &data) {
+    void addToReceiveQueue(const std::string &data, const ConnectionPartner &partner) {
         std::unique_lock<std::mutex> lock(receive_queue_mutex);
         receive_queue.append(data);
+        next_receive_partner = partner;
+        lock.unlock();
         receive_queue_cv.notify_one();
     }
 
-    bool sendSpongeContains(const std::string &data) const {
-        return send_sponge.find(data) != std::string::npos;
+    bool sendSpongeContains(const std::string &data, const ConnectionPartner &partner) const {
+        return send_sponge.find(data) != std::string::npos && last_send_partner == partner;
     }
 };
 
@@ -107,12 +114,18 @@ TEST_CASE("Create network runtime") {
     REQUIRE(message_set.contains("HEARTBEAT"));
     REQUIRE(message_set.size() == 1);
 
+    ConnectionPartner interface_partner = {0x0a290101, 14550, false};
+    ConnectionPartner interface_wrong_partner = {0x0a290103, 14550, false};
+
     DummyInterface interface;
     NetworkRuntime network({253, 1}, message_set, interface);
-    Connection connection{message_set, {1, 1}};
-    network.addConnection(connection);
+
+    interface.addToReceiveQueue("\xfd\x09\x00\x00\x00\xfd\x01\x00\x00\x00\x04\x00\x00\x00\x01\x02\x03\x05\x06\x77\x53"s, interface_partner);
+    auto connection = network.awaitConnection();
+
 
     SUBCASE("Can send message") {
+        interface.reset();
         auto message = message_set.create("HEARTBEAT")({
             {"type", 1},
             {"autopilot", 2},
@@ -120,16 +133,17 @@ TEST_CASE("Create network runtime") {
             {"custom_mode", 4},
             {"system_status", 5},
             {"mavlink_version", 6}});
-        connection.send(message);
+        connection->send(message);
         bool found = (interface.sendSpongeContains(
-                "\xfd\x09\x00\x00\x00\xfd\x01\x00\x00\x00\x04\x00\x00\x00\x01\x02\x03\x05\x06\x77\x53"s));
+                "\xfd\x09\x00\x00\x00\xfd\x01\x00\x00\x00\x04\x00\x00\x00\x01\x02\x03\x05\x06\x77\x53"s, interface_partner));
         CHECK(found);
     }
 
     SUBCASE("Can receive message") {
-        auto expectation = connection.expect("HEARTBEAT");
-        interface.addToReceiveQueue("\xfd\x09\x00\x00\x00\x01\x01\x00\x00\x00\x04\x00\x00\x00\x01\x02\x03\x05\x06\x46\x61"s);
-        auto message = connection.receive(expectation);
+        interface.reset();
+        auto expectation = connection->expect("HEARTBEAT");
+        interface.addToReceiveQueue("\xfd\x09\x00\x00\x00\x01\x01\x00\x00\x00\x04\x00\x00\x00\x01\x02\x03\x05\x06\x46\x61"s, interface_partner);
+        auto message = connection->receive(expectation);
         CHECK(message.name() == "HEARTBEAT");
         CHECK(message.get<int>("type") == 1);
         CHECK(message.get<int>("autopilot") == 2);
@@ -139,28 +153,32 @@ TEST_CASE("Create network runtime") {
         CHECK(message.get<int>("mavlink_version") == 6);
     }
 
-    SUBCASE("Can not receive message from wrong source") {
-        auto expectation = connection.expect("HEARTBEAT");
-        interface.addToReceiveQueue("\xfd\x09\x00\x00\x00\xfd\x01\x00\x00\x00\x04\x00\x00\x00\x01\x02\x03\x05\x06\x77\x53"s);
-        CHECK_THROWS_AS(auto message = connection.receive(expectation, 100), TimeoutException);
+    SUBCASE("Can not receive message from wrong partner") {
+        interface.reset();
+        auto expectation = connection->expect("HEARTBEAT");
+        interface.addToReceiveQueue("\xfd\x09\x00\x00\x00\xfd\x01\x00\x00\x00\x04\x00\x00\x00\x01\x02\x03\x05\x06\x77\x53"s, interface_wrong_partner);
+        CHECK_THROWS_AS(auto message = connection->receive(expectation, 100), TimeoutException);
     }
 
     SUBCASE("Can not receive message with CRC error") {
-        auto expectation = connection.expect("HEARTBEAT");
-        interface.addToReceiveQueue("\xfd\x09\x00\x00\x00\xfd\x01\x00\x00\x00\x04\x00\x00\x00\x01\x02\x03\x05\x06\x77\x54"s);
-        CHECK_THROWS_AS(auto message = connection.receive(expectation, 100), TimeoutException);
+        interface.reset();
+        auto expectation = connection->expect("HEARTBEAT");
+        interface.addToReceiveQueue("\xfd\x09\x00\x00\x00\xfd\x01\x00\x00\x00\x04\x00\x00\x00\x01\x02\x03\x05\x06\x77\x54"s, interface_partner);
+        CHECK_THROWS_AS(auto message = connection->receive(expectation, 100), TimeoutException);
     }
 
     SUBCASE("Can not receive message with unknown message ID") {
-        auto expectation = connection.expect(9912);
-        interface.addToReceiveQueue("\xfd\x04\x00\x00\x00\x01\x01\xb8\x26\x00\xcd\xcc\x54\x41\x59\x8e"s);
-        CHECK_THROWS_AS(auto message = connection.receive(expectation, 100), TimeoutException);
+        interface.reset();
+        auto expectation = connection->expect(9912);
+        interface.addToReceiveQueue("\xfd\x04\x00\x00\x00\x01\x01\xb8\x26\x00\xcd\xcc\x54\x41\x59\x8e"s, interface_partner);
+        CHECK_THROWS_AS(auto message = connection->receive(expectation, 100), TimeoutException);
     }
 
     SUBCASE("Receive throws a NetworkError if the interface fails") {
-        auto expectation = connection.expect("HEARTBEAT");
+        interface.reset();
+        auto expectation = connection->expect("HEARTBEAT");
         interface.makeFailOnNextReceive();
-        CHECK_THROWS_AS(auto message = connection.receive(expectation), NetworkError);
+        CHECK_THROWS_AS(auto message = connection->receive(expectation), NetworkError);
     }
 
 }

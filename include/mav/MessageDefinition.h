@@ -15,6 +15,47 @@
 namespace mav {
 
     constexpr int ANY_ID = -1;
+    constexpr int LIBMAV_DEFAULT_ID = 97;
+
+
+    struct ConnectionPartner {
+        uint32_t _address;
+        uint16_t _port;
+        bool _is_uart;
+
+    public:
+        ConnectionPartner() = default;
+
+        ConnectionPartner(uint32_t address_, uint16_t port_, bool is_uart_) :
+        _address(address_), _port(port_), _is_uart(is_uart_) {}
+
+        bool operator==(const ConnectionPartner& other) const {
+            return _address == other._address && _port == other._port && _is_uart == other._is_uart;
+        }
+
+        bool operator!=(const ConnectionPartner& other) const {
+            return !(*this == other);
+        }
+
+        [[nodiscard]] uint32_t address() const {
+            return _address;
+        }
+
+        [[nodiscard]] uint16_t port() const {
+            return _port;
+        }
+
+        [[nodiscard]] bool isUart() const {
+            return _is_uart;
+        }
+    };
+
+    struct _ConnectionPartnerHash {
+        std::size_t operator()(const ConnectionPartner& k) const {
+            return (k.isUart() << 17) | (k.address() << 16) | k.port();
+        }
+    };
+
 
     class Identifier {
     public:

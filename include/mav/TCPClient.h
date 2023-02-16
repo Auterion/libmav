@@ -13,15 +13,16 @@
 
 namespace mav {
 
-    class TCP : public mav::NetworkInterface {
+    class TCPClient : public mav::NetworkInterface {
 
     private:
         mutable std::atomic_bool _should_terminate{false};
         int _socket = -1;
+        ConnectionPartner _partner;
 
     public:
 
-        TCP(const std::string& address, int port) {
+        TCPClient(const std::string& address, int port) {
             _socket = socket(AF_INET, SOCK_STREAM, 0);
             if (_socket < 0) {
                 throw NetworkError("Could not create socket");
@@ -30,6 +31,8 @@ namespace mav {
             server_address.sin_family = AF_INET;
             server_address.sin_port = htons(port);
             server_address.sin_addr.s_addr = inet_addr(address.c_str());
+
+            _partner = {server_address.sin_addr.s_addr, server_address.sin_port, false};
 
             if (connect(_socket, (struct sockaddr *) &server_address, sizeof(server_address)) < 0) {
                 ::close(_socket);
@@ -48,7 +51,7 @@ namespace mav {
           stop();
         }
 
-        void receive(uint8_t *destination, uint32_t size) override {
+        ConnectionPartner receive(uint8_t *destination, uint32_t size) override {
             uint32_t received = 0;
             while (received < size && !_should_terminate.load()) {
                 auto ret = read(_socket, destination, size - received);
@@ -62,9 +65,10 @@ namespace mav {
                 ::close(_socket);
                 throw NetworkInterfaceInterrupt();
             }
+            return _partner;
         }
 
-        void send(const uint8_t *data, uint32_t size) override {
+        void send(const uint8_t *data, uint32_t size, ConnectionPartner) override {
             uint32_t sent = 0;
             while (sent < size && !_should_terminate.load()) {
                 auto ret = write(_socket, data, size - sent);
@@ -80,7 +84,11 @@ namespace mav {
             }
         }
 
-        virtual ~TCP() {
+        void flush() override {
+            // Nothing to do
+        }
+
+        virtual ~TCPClient() {
             stop();
         }
 

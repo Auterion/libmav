@@ -46,7 +46,7 @@ namespace mav {
     class Message {
         friend MessageSet;
     private:
-
+        ConnectionPartner _source_partner;
         std::array<uint8_t, MessageDefinition::MAX_MESSAGE_SIZE> _backing_memory{};
         const MessageDefinition* _message_definition;
 
@@ -54,9 +54,10 @@ namespace mav {
             _message_definition(&message_definition) {
         }
 
-        Message(const MessageDefinition &message_definition,
+        Message(const MessageDefinition &message_definition, ConnectionPartner source_partner,
                 std::array<uint8_t, MessageDefinition::MAX_MESSAGE_SIZE> &&backing_memory) :
                 _message_definition(&message_definition),
+                _source_partner(source_partner),
                 _backing_memory(std::move(backing_memory)) {}
 
 
@@ -107,9 +108,9 @@ namespace mav {
 
     public:
 
-        static inline Message _instantiateFromMemory(const MessageDefinition &definition,
+        static inline Message _instantiateFromMemory(const MessageDefinition &definition, ConnectionPartner source_partner,
                                           std::array<uint8_t, MessageDefinition::MAX_MESSAGE_SIZE> &&backing_memory) {
-            return Message{definition, std::move(backing_memory)};
+            return Message{definition, source_partner, std::move(backing_memory)};
         }
 
         using _InitPairType = std::pair<const std::string, NativeVariantType>;
@@ -172,6 +173,10 @@ namespace mav {
 
         [[nodiscard]] Header<uint8_t*> header() {
             return Header<uint8_t*>(_backing_memory.data());
+        }
+
+        [[nodiscard]] const ConnectionPartner& source() const {
+            return _source_partner;
         }
 
         Message& set(std::initializer_list<_InitPairType> init) {
@@ -353,8 +358,6 @@ namespace mav {
                 }
             }
         }
-
-
 
         [[nodiscard]] uint32_t finalize(uint8_t seq, const Identifier &sender) {
             auto last_nonzero = std::find_if(_backing_memory.rend() -

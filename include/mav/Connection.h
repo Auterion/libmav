@@ -20,6 +20,7 @@ namespace mav {
         explicit TimeoutException(const char* msg) : std::runtime_error(msg) {}
     };
 
+
     class Connection {
     private:
 
@@ -32,7 +33,7 @@ namespace mav {
 
         // connection properties
         const MessageSet& _message_set;
-        Identifier _partner_id;
+        ConnectionPartner _partner;
 
         // connection state
         int _heartbeat_message_id;
@@ -47,18 +48,17 @@ namespace mav {
         std::unordered_map<CallbackHandle, Callback> _message_callbacks;
 
     public:
-        Connection(const MessageSet &message_set, Identifier partner_id) :
-        _message_set(message_set), _partner_id(partner_id) {
+
+        Connection(const MessageSet &message_set, ConnectionPartner partner) :
+        _message_set(message_set), _partner(partner) {
             _heartbeat_message_id = _message_set.idForMessage("HEARTBEAT");
         }
 
-        explicit Connection(const MessageSet &message_set) : Connection(message_set, {mav::ANY_ID, mav::ANY_ID}) {}
+        ConnectionPartner partner() const {
+            return _partner;
+        }
 
         void consumeMessageFromNetwork(const Message& message) {
-            // This connection is not concerned about messages from this partner. Ignore.
-            if (!message.header().source().filter(_partner_id)) {
-                return;
-            }
 
             // in case we received a heartbeat, update last heartbeat time, to keep the connection alive.
             if (message.header().msgId() == _heartbeat_message_id) {

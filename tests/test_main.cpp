@@ -8,6 +8,6 @@
 #include "mav/Message.h"
 #include "mav/MessageFieldIterator.h"
 #include "mav/Network.h"
-#include "mav/TCP.h"
-#include "mav/UDPPassive.h"
+#include "mav/TCPClient.h"
+#include "mav/UDPServer.h"
 #include "mav/Serial.h"

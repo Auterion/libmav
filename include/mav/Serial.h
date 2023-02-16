@@ -6,6 +6,7 @@
 #include <fcntl.h>
 #include <termios.h>
 #include <poll.h>
+#include <hash_map>
 #include "Network.h"
 
 #ifndef MAV_SERIAL_H
@@ -16,9 +17,13 @@ namespace mav {
     private:
         int _fd;
         mutable std::atomic_bool _should_terminate{false};
+        ConnectionPartner _partner;
 
     public:
         Serial(const std::string &device, int baud, bool flow_control = true) {
+            std::hash<std::string> hasher;
+            _partner = {static_cast<uint32_t>(hasher(device)), 0, true};
+
             _fd = open(device.c_str(), O_RDWR | O_NOCTTY);
             if (_fd == -1) {
                 throw NetworkError(StringFormat() << "Failed to open " << device << " error " << _fd << StringFormat::end);
@@ -54,7 +59,11 @@ namespace mav {
         }
 
 
-        void send(const uint8_t* data, uint32_t size) const {
+        void send(const uint8_t* data, uint32_t size, ConnectionPartner partner) override {
+            if (partner != _partner) {
+                throw NetworkError("Serial send to wrong partner");
+            }
+
             uint32_t sent = 0;
             while (sent < size && !_should_terminate.load()) {
                 auto ret = write(_fd, data, size - sent);
@@ -69,7 +78,7 @@ namespace mav {
             }
         };
 
-        void receive(uint8_t* data, uint32_t size) const {
+        ConnectionPartner receive(uint8_t* data, uint32_t size) override {
             uint32_t received = 0;
             while (received < size && !_should_terminate.load()) {
                 auto ret = read(_fd, data, size - received);
@@ -82,11 +91,15 @@ namespace mav {
             if (_should_terminate.load()) {
                 throw NetworkInterfaceInterrupt();
             }
+            return _partner;
         };
 
         void close() const {
             _should_terminate.store(true);
             ::close(_fd);
+        }
+
+        void flush() override {
         }
 
 
