@@ -85,26 +85,68 @@ message.set({
 
 Libmav has classes for the following protocols:
 - Serial
-- TCP
-- UDP Passive *Respond to anybody that already sends us data*
-- ~UDP Active *Initiate sending data to somebody, only accept data from there*~ *Coming soon*
+- TCP Client
+- TCP Server *Coming soon*
+- UDP Client *Coming soon*
+- UDP Server
 
 Libmav does not do any threading, except for the `NetworkRuntime` class.
-The `NetworkRuntime` class spawns a single thread to drive the receive end
-of a connection.
+The `NetworkRuntime` class spawns a two threads. One two drive the receive
+loop and one to drive the HEARTBEAT transmission and timeout handling.
 
 ```C++
 // Create interface for physical network
-auto physical = libmav::TCP("<ip>", 14550);
+auto physical = libmav::TCPClient("<ip>", 14550);
 
-// Create a network runtime with a receive thread. Specify
-// our own system id / component id to be used for outgoing messages
-auto runtime = libmav::NetworkRuntime({253, 1}, message_set, physical);
+auto heartbeat_message = message_set.create("HEARTBEAT");
+heartbeat_message.set({
+    {"type", message_set.e("MAV_TYPE_GCS")},
+    {"autopilot", message_set.e("MAV_AUTOPILOT_GENERIC")},
+    {"base_mode", 0},
+    {"custom_mode", 0},
+    {"system_status", message_set.e("MAV_STATE_ACTIVE")},
+    {"mavlink_version", 2}
+});
 
-// Add a connection
-auto connection = libmav::Connection(message_set);
-runtime.addConnection(connection);
+// Create a network runtime with
+// This runtime will automatically send out HEARTBEAT messages, iff a HEARTBEAT
+// message is defined here
+auto runtime = libmav::NetworkRuntime(
+        message_set, heartbeat_message, physical);
+
+// You can change the heartbeat message any time by calling
+// setHeartbeatMessage on the runtime. Also you can clear
+// the heartbeat at any time by calling clearHeartbeat
+
+// Wait for the connection (as defined as we 
+// receive some mavlink from the other end), with a 2s timeout
+auto connection = runtime.awaitConnection(2000);
+
+// Check if connection is still alive
+if (connection->alive()) {
+    // Do something with the connection
+}
 ```
+
+```C++
+// Create interface for physical network
+auto physical = libmav::UDPServer(14559);
+
+// Create a network runtime with
+// This runtime will not automatically send HEARTBEAT messages
+auto runtime = libmav::NetworkRuntime(message_set, physical);
+
+// Handle incoming connections
+runtime.onConnection([](std::shared_ptr<mav::Connection> connection) {
+    // Do something with the connection
+});
+
+runtime.onConnectionLost([](std::shared_ptr<mav::Connection> connection) {
+    // Do something when a connection drops
+});
+
+```
+
 
 The classes will throw `libmav::NetworkError` if connection fails.
 
