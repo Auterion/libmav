@@ -29,7 +29,7 @@ namespace mav {
             std::function<void(const std::exception_ptr& exception)> error_callback;
         };
 
-        static constexpr int CONNECTION_TIMEOUT = 5000;
+        static constexpr int CONNECTION_TIMEOUT = 3000;
 
         // connection properties
         const MessageSet& _message_set;
@@ -52,6 +52,7 @@ namespace mav {
         Connection(const MessageSet &message_set, ConnectionPartner partner) :
         _message_set(message_set), _partner(partner) {
             _heartbeat_message_id = _message_set.idForMessage("HEARTBEAT");
+            _last_heartbeat_ms = millis();
         }
 
         ConnectionPartner partner() const {
@@ -100,10 +101,11 @@ namespace mav {
 
 
         void send(Message &message) {
-            if (millis() - _last_heartbeat_ms >= CONNECTION_TIMEOUT) {
-                //throw TimeoutException{"Mavlink connection timed out"};
-            }
             forceSend(message);
+        }
+
+        bool alive() const {
+            return millis() - _last_heartbeat_ms < CONNECTION_TIMEOUT;
         }
 
         template<typename T, typename E>

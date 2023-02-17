@@ -9,6 +9,7 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <atomic>
+#include <csignal>
 #include "Network.h"
 
 namespace mav {

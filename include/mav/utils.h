@@ -115,7 +115,6 @@ namespace mav {
     };
 
 
-
     template<typename T, typename... Rest>
     struct is_any : std::false_type {};
 

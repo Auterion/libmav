@@ -103,21 +103,26 @@ namespace mav {
     private:
         std::atomic_bool _should_terminate{false};
         std::thread _receive_thread;
+        std::thread _heartbeat_thread;
 
         NetworkInterface& _interface;
         const MessageSet& _message_set;
+        std::optional<Message> _heartbeat_message;
+        std::mutex _heartbeat_message_mutex;
         StreamParser _parser;
         Identifier _own_id;
         std::mutex _connections_mutex;
+        std::mutex _send_mutex;
         std::unordered_map<ConnectionPartner, std::shared_ptr<Connection>, _ConnectionPartnerHash> _connections;
         std::unique_ptr<std::promise<std::shared_ptr<Connection>>> _first_connection_promise = nullptr;
         uint8_t _seq = 0;
 
         std::function<void(const std::shared_ptr<Connection>&)> _on_connection;
-
+        std::function<void(const std::shared_ptr<Connection>&)> _on_connection_lost;
 
         void _sendMessage(Message &message, const ConnectionPartner &partner) {
             int wire_length = static_cast<int>(message.finalize(_seq++, _own_id));
+            std::unique_lock<std::mutex> lock(_send_mutex);
             _interface.send(message.data(), wire_length, partner);
         }
 
@@ -165,6 +170,52 @@ namespace mav {
             }
         }
 
+        void _heartbeat_thread_function() {
+            while (!_should_terminate.load()) {
+                try {
+                    std::lock_guard<std::mutex> lock(_connections_mutex);
+                    std::lock_guard<std::mutex> heartbeat_message_lock(_heartbeat_message_mutex);
+                    if (!_connections.empty()) {
+                        for (auto& connection : _connections) {
+                            if (_heartbeat_message) {
+                                connection.second->send(_heartbeat_message.value());
+                            }
+                        }
+                    } else {
+                        if (_heartbeat_message) {
+                            _sendMessage(_heartbeat_message.value(), {});
+                        }
+                    }
+                } catch (NetworkError &e) {
+                    _should_terminate.store(true);
+                    // Spread the network error to all connections
+                    for (auto& connection : _connections) {
+                        connection.second->consumeNetworkExceptionFromNetwork(std::make_exception_ptr(e));
+                    }
+                } catch (NetworkInterfaceInterrupt &e) {
+                    _should_terminate.store(true);
+                }
+
+                // clean up dead connections
+                {
+                    std::unique_lock<std::mutex> lock(_connections_mutex);
+                    for (auto it = _connections.begin(); it != _connections.end();) {
+
+                        if (!it->second->alive()) {
+                            if (_on_connection_lost) {
+                                _on_connection_lost(it->second);
+                            }
+                            it = _connections.erase(it);
+                        } else {
+                            ++it;
+                        }
+                    }
+                }
+
+                std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+            }
+        }
+
 
     public:
         NetworkRuntime(const Identifier &own_id, const MessageSet &message_set, NetworkInterface &interface) :
@@ -176,14 +227,33 @@ namespace mav {
                     _receive_thread_function();
                 }
             };
+
+            _heartbeat_thread = std::thread{
+                    [this]() {
+                        _heartbeat_thread_function();
+                    }
+            };
         }
 
         NetworkRuntime(const MessageSet &message_set, NetworkInterface &interface) :
                 NetworkRuntime({LIBMAV_DEFAULT_ID, LIBMAV_DEFAULT_ID},
                                message_set, interface) {}
 
+        NetworkRuntime(const Identifier &own_id, const MessageSet &message_set, const Message &heartbeat_message, NetworkInterface &interface) :
+                NetworkRuntime(own_id, message_set, interface) {
+            setHeartbeatMessage(heartbeat_message);
+        }
+
+        NetworkRuntime(const MessageSet &message_set, const Message &heartbeat_message, NetworkInterface &interface) :
+                NetworkRuntime({LIBMAV_DEFAULT_ID, LIBMAV_DEFAULT_ID}, message_set, heartbeat_message, interface) {}
+
+
         void onConnection(std::function<void(const std::shared_ptr<Connection>&)> on_connection) {
             _on_connection = std::move(on_connection);
+        }
+
+        void onConnectionLost(std::function<void(const std::shared_ptr<Connection>&)> on_connection_lost) {
+            _on_connection_lost = std::move(on_connection_lost);
         }
 
         std::shared_ptr<Connection> awaitConnection(int timeout_ms = -1) {
@@ -194,12 +264,23 @@ namespace mav {
                 }
             }
             _first_connection_promise = std::make_unique<std::promise<std::shared_ptr<Connection>>>();
+            auto fut = _first_connection_promise->get_future();
             if (timeout_ms >= 0) {
-                if (_first_connection_promise->get_future().wait_for(std::chrono::milliseconds(timeout_ms)) == std::future_status::timeout) {
+                if (fut.wait_for(std::chrono::milliseconds(timeout_ms)) == std::future_status::timeout) {
                     throw TimeoutException("Timeout while waiting for first connection");
                 }
             }
-            return _first_connection_promise->get_future().get();
+            return fut.get();
+        }
+
+        void setHeartbeatMessage(const Message &message) {
+            std::unique_lock<std::mutex> lock(_send_mutex);
+            _heartbeat_message = message;
+        }
+
+        void clearHeartbeat() {
+            std::unique_lock<std::mutex> lock(_send_mutex);
+            _heartbeat_message = std::nullopt;
         }
 
         void stop() {
@@ -207,6 +288,9 @@ namespace mav {
             _should_terminate.store(true);
             if (_receive_thread.joinable()) {
                 _receive_thread.join();
+            }
+            if (_heartbeat_thread.joinable()) {
+                _heartbeat_thread.join();
             }
         }
 

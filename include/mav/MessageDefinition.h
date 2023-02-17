@@ -48,6 +48,24 @@ namespace mav {
         [[nodiscard]] bool isUart() const {
             return _is_uart;
         }
+
+        [[nodiscard]] std::string toString() const {
+            if (isUart()) {
+                std::stringstream ss;
+                ss << "UART " << std::hex << address();
+                return ss.str();
+            } else {
+                std::stringstream ss;
+                for (int i = 0; i < 4; i++) {
+                    ss << ((address() >> (8 * i)) & 0xFF);
+                    if (i < 3) {
+                        ss << ".";
+                    }
+                }
+                ss << ":" << port();
+                return ss.str();
+            }
+        }
     };
 
     struct _ConnectionPartnerHash {

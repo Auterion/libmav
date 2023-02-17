@@ -60,10 +60,6 @@ namespace mav {
 
 
         void send(const uint8_t* data, uint32_t size, ConnectionPartner partner) override {
-            if (partner != _partner) {
-                throw NetworkError("Serial send to wrong partner");
-            }
-
             uint32_t sent = 0;
             while (sent < size && !_should_terminate.load()) {
                 auto ret = write(_fd, data, size - sent);
