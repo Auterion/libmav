@@ -5,10 +5,10 @@
 #define LIBMAVLINK_TCP_H
 
 #include <sys/socket.h>
-#include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <atomic>
+#include <unistd.h>
 #include <csignal>
 #include "Network.h"
 

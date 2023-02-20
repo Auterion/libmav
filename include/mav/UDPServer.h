@@ -9,6 +9,7 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <atomic>
+#include <unistd.h>
 #include <vector>
 #include <array>
 #include <csignal>
