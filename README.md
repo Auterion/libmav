@@ -1,7 +1,5 @@
 ![build badge](https://github.com/ThomasDebrunner/libmav/actions/workflows/test.yml/badge.svg)
 
-⚠️ This is still early development. The API may not be stable yet. ⚠️
-
 # libmav
 
 The better mavlink library.
@@ -87,7 +85,7 @@ Libmav has classes for the following protocols:
 - Serial
 - TCP Client
 - TCP Server *Coming soon*
-- UDP Client *Coming soon*
+- UDP Client
 - UDP Server
 
 Libmav does not do any threading, except for the `NetworkRuntime` class.
