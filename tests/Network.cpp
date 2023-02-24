@@ -58,9 +58,6 @@ public:
         return next_receive_partner;
     }
 
-    void flush() override {
-    }
-
     virtual ~DummyInterface() {
         stop();
     }

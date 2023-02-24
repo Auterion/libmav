@@ -95,10 +95,6 @@ namespace mav {
             ::close(_fd);
         }
 
-        void flush() override {
-        }
-
-
         virtual ~Serial() {
             ::close(_fd);
         }

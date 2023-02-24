@@ -38,8 +38,9 @@ namespace mav {
     public:
         virtual void close() const = 0;
         virtual void send(const uint8_t* data, uint32_t size, ConnectionPartner partner) = 0;
-        virtual void flush() = 0;
         virtual ConnectionPartner receive(uint8_t* destination, uint32_t size) = 0;
+        virtual void markMessageBoundary() {};
+        virtual void markSyncing() {};
     };
 
 
@@ -63,8 +64,12 @@ namespace mav {
 
             std::array<uint8_t, MessageDefinition::MAX_MESSAGE_SIZE> backing_memory{};
             while (true) {
-                // synchronize
-                while (!_checkMagicByte()) {}
+                _interface.markMessageBoundary();
+                if (!_checkMagicByte()) {
+                    _interface.markSyncing();
+                    // synchronize
+                    while (!_checkMagicByte()) {}
+                }
 
                 backing_memory[0] = 0xFD;
                 _interface.receive(backing_memory.data() + 1, MessageDefinition::HEADER_SIZE -1);
@@ -92,7 +97,6 @@ namespace mav {
                     // crc error. Try to re-sync.
                     continue;
                 }
-
                 return Message::_instantiateFromMemory(definition, partner, std::move(backing_memory));
             }
         }

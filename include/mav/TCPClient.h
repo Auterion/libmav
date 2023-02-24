@@ -44,6 +44,7 @@ namespace mav {
         void stop() const {
             _should_terminate.store(true);
             if (_socket >= 0) {
+                ::shutdown(_socket, SHUT_RDWR);
                 ::close(_socket);
             }
         }
@@ -83,10 +84,6 @@ namespace mav {
                 ::close(_socket);
                 throw NetworkInterfaceInterrupt();
             }
-        }
-
-        void flush() override {
-            // Nothing to do
         }
 
         virtual ~TCPClient() {
