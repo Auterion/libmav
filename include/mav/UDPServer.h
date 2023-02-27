@@ -54,7 +54,7 @@ namespace mav {
             }
         }
 
-        void close() const override {
+        void close() override {
           stop();
         }
 

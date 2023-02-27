@@ -11,7 +11,7 @@
 using namespace mav;
 
 
-TEST_CASE("Message set methods") {
+TEST_CASE("UDP server client") {
     MessageSet message_set;
     message_set.addFromXMLString(R"(
         <mavlink>
@@ -54,7 +54,7 @@ TEST_CASE("Message set methods") {
     REQUIRE(message_set.contains("BIG_MESSAGE"));
     REQUIRE((message_set.size() == 2));
 
-    SUBCASE("Can connect server client") {
+    SUBCASE("Can connect server client UDP") {
         // setup server
         mav::UDPServer server_physical(19334);
         mav::NetworkRuntime server_runtime(message_set, server_physical);
@@ -85,7 +85,7 @@ TEST_CASE("Message set methods") {
 
         auto client = client_runtime.awaitConnection(100);
 
-        SUBCASE("Can send message from server to client") {
+        SUBCASE("Can send message from server to client with UDP") {
             auto client_expectation = client->expect("BIG_MESSAGE");
             server->send(message_set.create("BIG_MESSAGE")({
                                                                    {"uint8_field", 1},
@@ -108,7 +108,7 @@ TEST_CASE("Message set methods") {
             CHECK((client_message["char_arr_field"].as<std::string>() == "hello client"));
         }
 
-        SUBCASE("Can send message from client to server") {
+        SUBCASE("Can send message from client to server with UDP") {
             auto server_expectation = server->expect("BIG_MESSAGE");
             client->send(message_set.create("BIG_MESSAGE")({
                                                                    {"uint8_field", 1},

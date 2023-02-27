@@ -2,8 +2,8 @@
 // Created by thomas on 17.02.23.
 //
 
-#ifndef MAVLINK_FUNNEL_UDPCLIENT_H
-#define MAVLINK_FUNNEL_UDPCLIENT_H
+#ifndef LIBMAVLINK_UDPCLIENT_H
+#define LIBMAVLINK_UDPCLIENT_H
 
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -52,7 +52,7 @@ namespace mav {
             };
         }
 
-        void stop() const {
+        void stop() {
             _should_terminate.store(true);
             if (_socket >= 0) {
                 ::shutdown(_socket, SHUT_RDWR);
@@ -60,7 +60,7 @@ namespace mav {
             }
         }
 
-        void close() const override {
+        void close() override {
             stop();
         }
 
@@ -107,4 +107,4 @@ namespace mav {
     };
 }
 
-#endif //MAVLINK_FUNNEL_UDPCLIENT_H
+#endif //LIBMAVLINK_UDPCLIENT_H

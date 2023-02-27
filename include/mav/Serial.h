@@ -90,7 +90,7 @@ namespace mav {
             return _partner;
         };
 
-        void close() const {
+        void close() {
             _should_terminate.store(true);
             ::close(_fd);
         }

@@ -33,7 +33,7 @@ public:
         receive_queue_cv.notify_all();
     }
 
-    void close() const override {
+    void close() override {
         stop();
     }
     void send(const uint8_t *data, uint32_t size, ConnectionPartner partner) override {

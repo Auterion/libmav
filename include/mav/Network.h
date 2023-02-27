@@ -36,7 +36,7 @@ namespace mav {
 
     class NetworkInterface {
     public:
-        virtual void close() const = 0;
+        virtual void close() = 0;
         virtual void send(const uint8_t* data, uint32_t size, ConnectionPartner partner) = 0;
         virtual ConnectionPartner receive(uint8_t* destination, uint32_t size) = 0;
         virtual void markMessageBoundary() {};
