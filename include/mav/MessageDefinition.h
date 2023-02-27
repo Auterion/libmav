@@ -49,6 +49,10 @@ namespace mav {
             return _is_uart;
         }
 
+        [[nodiscard]] bool isBroadcast() const {
+            return _address == 0 && _port == 0;
+        }
+
         [[nodiscard]] std::string toString() const {
             if (isUart()) {
                 std::stringstream ss;

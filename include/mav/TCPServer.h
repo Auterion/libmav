@@ -85,6 +85,11 @@ namespace mav {
             if (_master_socket < 0) {
                 throw NetworkError("Could not create socket");
             }
+            const int enable = 1;
+            if (setsockopt(_master_socket, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(int)) < 0) {
+                ::close(_master_socket);
+                throw NetworkError("Could not set socket options");
+            }
             struct sockaddr_in server_address{};
             server_address.sin_family = AF_INET;
             server_address.sin_port = htons(port);
@@ -190,16 +195,7 @@ namespace mav {
             return _current_client;
         }
 
-        void send(const uint8_t *data, uint32_t size, ConnectionPartner target) override {
-            int partner_socket = -1;
-            {
-                std::lock_guard<std::mutex> lock(_client_sockets_mutex);
-                auto partner = _partner_to_fd.find(target);
-                if (partner == _partner_to_fd.end()) {
-                    throw NetworkError("Could not find client socket");
-                }
-                partner_socket = partner->second;
-            }
+        void _sendToSingleTarget(const uint8_t *data, uint32_t size, int partner_socket) {
             uint32_t sent = 0;
             while (sent < size && !_should_terminate.load()) {
                 auto ret = write(partner_socket, data, size - sent);
@@ -211,6 +207,22 @@ namespace mav {
             if (_should_terminate.load()) {
                 stop();
                 throw NetworkInterfaceInterrupt();
+            }
+        }
+
+        void send(const uint8_t *data, uint32_t size, ConnectionPartner target) override {
+            if (target.isBroadcast()) {
+                std::lock_guard<std::mutex> lock(_client_sockets_mutex);
+                for (auto client_socket : _partner_to_fd) {
+                    _sendToSingleTarget(data, size, client_socket.second);
+                }
+            } else {
+                std::lock_guard<std::mutex> lock(_client_sockets_mutex);
+                auto partner = _partner_to_fd.find(target);
+                if (partner == _partner_to_fd.end()) {
+                    throw NetworkError("Could not find client socket");
+                }
+                _sendToSingleTarget(data, size, partner->second);
             }
         }
 

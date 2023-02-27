@@ -179,17 +179,9 @@ namespace mav {
                 try {
                     std::lock_guard<std::mutex> lock(_connections_mutex);
                     std::lock_guard<std::mutex> heartbeat_message_lock(_heartbeat_message_mutex);
-                    if (!_connections.empty()) {
-                        for (auto& connection : _connections) {
-                            if (_heartbeat_message) {
-                                connection.second->send(_heartbeat_message.value());
-                            }
-                        }
-                    } else {
                         if (_heartbeat_message) {
                             _sendMessage(_heartbeat_message.value(), {});
                         }
-                    }
                 } catch (NetworkError &e) {
                     _should_terminate.store(true);
                     // Spread the network error to all connections
