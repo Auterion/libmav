@@ -49,20 +49,31 @@ namespace mav {
         ConnectionPartner _source_partner;
         std::array<uint8_t, MessageDefinition::MAX_MESSAGE_SIZE> _backing_memory{};
         const MessageDefinition* _message_definition;
+        int _crc_offset = -1;
 
         explicit Message(const MessageDefinition &message_definition) :
             _message_definition(&message_definition) {
         }
 
-        Message(const MessageDefinition &message_definition, ConnectionPartner source_partner,
+        Message(const MessageDefinition &message_definition, ConnectionPartner source_partner, int crc_offset,
                 std::array<uint8_t, MessageDefinition::MAX_MESSAGE_SIZE> &&backing_memory) :
                 _message_definition(&message_definition),
                 _source_partner(source_partner),
+                _crc_offset(crc_offset),
                 _backing_memory(std::move(backing_memory)) {}
 
+        inline void _clearCRC() {
+            if (_crc_offset >= 0) {
+                _backing_memory[_crc_offset] = 0;
+                _backing_memory[_crc_offset + 1] = 0;
+                _crc_offset = -1;
+            }
+        }
 
         template <typename T>
         void _writeSingle(const Field &field, const T &v, int in_field_offset = 0) {
+            // any write will potentially change the crc offset, so we invalidate it
+            _clearCRC();
             // make sure that we only have simplistic base types here
             static_assert(is_any<std::decay_t<T>, short, int, long, unsigned int, unsigned long,
                     char, uint8_t, int8_t, uint16_t, int16_t, uint32_t, int32_t, uint64_t, int64_t, float, double
@@ -109,8 +120,8 @@ namespace mav {
     public:
 
         static inline Message _instantiateFromMemory(const MessageDefinition &definition, ConnectionPartner source_partner,
-                                          std::array<uint8_t, MessageDefinition::MAX_MESSAGE_SIZE> &&backing_memory) {
-            return Message{definition, source_partner, std::move(backing_memory)};
+                                          int crc_offset, std::array<uint8_t, MessageDefinition::MAX_MESSAGE_SIZE> &&backing_memory) {
+            return Message{definition, source_partner, crc_offset, std::move(backing_memory)};
         }
 
         using _InitPairType = std::pair<const std::string, NativeVariantType>;
@@ -311,7 +322,10 @@ namespace mav {
                 throw std::invalid_argument(StringFormat() << "Field " << field_key <<
                                                         " is not of type char" << StringFormat::end);
             }
-            int real_string_length = strnlen(_backing_memory.data() + field.offset, field.type.size);
+            int max_string_length = _crc_offset < 0 ?
+                    field.type.size :
+                    std::min(field.type.size, _crc_offset - field.offset);
+            int real_string_length = strnlen(_backing_memory.data() + field.offset, max_string_length);
 
             return std::string{reinterpret_cast<const char*>(_backing_memory.data() + field.offset),
                                static_cast<std::string::size_type>(real_string_length)};
@@ -383,8 +397,8 @@ namespace mav {
             crc.accumulate(_backing_memory.begin() + 1, _backing_memory.begin() +
                 MessageDefinition::HEADER_SIZE + payload_size);
             crc.accumulate(_message_definition->crcExtra());
-            uint8_t* crc_destination = _backing_memory.data() + MessageDefinition::HEADER_SIZE + payload_size;
-            serialize(crc.crc16(), crc_destination);
+            _crc_offset = MessageDefinition::HEADER_SIZE + payload_size;
+            serialize(crc.crc16(), _backing_memory.data() + _crc_offset);
 
             return MessageDefinition::HEADER_SIZE + payload_size + MessageDefinition::CHECKSUM_SIZE;
         }

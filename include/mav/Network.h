@@ -97,7 +97,7 @@ namespace mav {
                     // crc error. Try to re-sync.
                     continue;
                 }
-                return Message::_instantiateFromMemory(definition, partner, std::move(backing_memory));
+                return Message::_instantiateFromMemory(definition, partner, crc_offset, std::move(backing_memory));
             }
         }
     };

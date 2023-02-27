@@ -26,7 +26,6 @@ TEST_CASE("Message set creation") {
             <field type="float" name="float_field">description</field>
             <field type="char[20]" name="char_arr_field">description</field>
             <field type="float[3]" name="float_arr_field">description</field>
-            <field type="float[3]" name="float_arr_field">description</field>
             <field type="int32_t[3]" name="int32_arr_field">description</field>
         </message>
     </messages>
@@ -202,6 +201,32 @@ TEST_CASE("Message set creation") {
 
     SUBCASE("Read an array into a too short return container") {
         CHECK_THROWS_AS((message.get<std::array<float, 2>>("float_arr_field")), std::out_of_range);
+    }
+
+    SUBCASE("String at the end of message") {
+        message.set("uint32_field", 0x0);
+        message.set("int8_field", 0x0);
+        message.set("uint16_field", 0x0);
+        message.set("int16_field", 0x0);
+        message.set("uint32_field", 0x0);
+        message.set("int32_field", 0x0);
+        message.set("uint64_field", 0x0);
+        message.set("int64_field", 0x0);
+        message.set("double_field", 0.0);
+        message.set("float_field", 0.0);
+        message.set("char_arr_field", "Hello World!");
+        message.set("float_arr_field", std::vector<float>{0.0, 0.0, 0.0});
+        message.set("int32_arr_field", std::vector<int32_t>{0, 0, 0});
+
+        int wire_size = message.finalize(5, {6, 7});
+        CHECK_EQ(message.get<std::string>("char_arr_field"), "Hello World!");
+
+        // check that it stays correct even after modifying the fields
+        message.set("uint32_field", 0x1);
+        CHECK_EQ(message.get<std::string>("char_arr_field"), "Hello World!");
+
+        message.set("char_arr_field", "Hello Worldo!");
+        CHECK_EQ(message.get<std::string>("char_arr_field"), "Hello Worldo!");
     }
 
 }
