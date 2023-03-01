@@ -92,7 +92,7 @@ namespace mav {
                 CRC crc;
                 crc.accumulate(backing_memory.begin() + 1, backing_memory.begin() + crc_offset);
                 crc.accumulate(definition.crcExtra());
-                auto crc_received = deserialize<uint16_t>(backing_memory.data() + crc_offset);
+                auto crc_received = deserialize<uint16_t>(backing_memory.data() + crc_offset, sizeof(uint16_t));
                 if (crc_received != crc.crc16()) {
                     // crc error. Try to re-sync.
                     continue;

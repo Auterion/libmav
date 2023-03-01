@@ -69,6 +69,14 @@ TEST_CASE("Message set creation") {
         CHECK(message.get<std::vector<int32_t>>("int32_arr_field") == std::vector<int32_t>{1, 2, 3});
     }
 
+    SUBCASE("Have fields truncated by zero-elision") {
+        message.set("int64_field", 34); // since largest field, will be at the end of the message
+        CHECK_EQ(message.get<int64_t>("int64_field"), 34);
+        auto ret = message.finalize(1, {2,3});
+        CHECK_EQ(message.get<int64_t>("int64_field"), 34);
+    }
+
+
     SUBCASE("Can set and get values with assignment API") {
         message["uint8_field"] = 0x12;
         message["int8_field"] = 0x12;
@@ -228,5 +236,4 @@ TEST_CASE("Message set creation") {
         message.set("char_arr_field", "Hello Worldo!");
         CHECK_EQ(message.get<std::string>("char_arr_field"), "Hello Worldo!");
     }
-
 }

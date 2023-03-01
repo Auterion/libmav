@@ -64,8 +64,8 @@ namespace mav {
 
         inline void _clearCRC() {
             if (_crc_offset >= 0) {
-                _backing_memory[_crc_offset] = 0;
-                _backing_memory[_crc_offset + 1] = 0;
+                std::fill(_backing_memory.begin() + _crc_offset,
+                          _backing_memory.begin() + _backing_memory.size(), 0);
                 _crc_offset = -1;
             }
         }
@@ -100,19 +100,21 @@ namespace mav {
 
         template <typename T>
         inline T _readSingle(const Field &field, int in_field_offset = 0) const {
-            const uint8_t* b_ptr = _backing_memory.data() + field.offset + in_field_offset;
+            int data_offset = field.offset + in_field_offset;
+            int max_size = _crc_offset >= 0 ? _crc_offset - data_offset : field.type.baseSize();
+            const uint8_t* b_ptr = _backing_memory.data() + data_offset;
             switch (field.type.base_type) {
-                case FieldType::BaseType::CHAR: return static_cast<T>(deserialize<char>(b_ptr));
-                case FieldType::BaseType::UINT8: return static_cast<T>(deserialize<uint8_t>(b_ptr));
-                case FieldType::BaseType::UINT16: return static_cast<T>(deserialize<uint16_t>(b_ptr));
-                case FieldType::BaseType::UINT32: return static_cast<T>(deserialize<uint32_t>(b_ptr));
-                case FieldType::BaseType::UINT64: return static_cast<T>(deserialize<uint64_t>(b_ptr));
-                case FieldType::BaseType::INT8: return static_cast<T>(deserialize<int8_t>(b_ptr));
-                case FieldType::BaseType::INT16: return static_cast<T>(deserialize<int16_t>(b_ptr));
-                case FieldType::BaseType::INT32: return static_cast<T>(deserialize<int32_t>(b_ptr));
-                case FieldType::BaseType::INT64: return static_cast<T>(deserialize<int64_t>(b_ptr));
-                case FieldType::BaseType::FLOAT: return static_cast<T>(deserialize<float>(b_ptr));
-                case FieldType::BaseType::DOUBLE: return static_cast<T>(deserialize<double>(b_ptr));
+                case FieldType::BaseType::CHAR: return static_cast<T>(deserialize<char>(b_ptr, max_size));
+                case FieldType::BaseType::UINT8: return static_cast<T>(deserialize<uint8_t>(b_ptr, max_size));
+                case FieldType::BaseType::UINT16: return static_cast<T>(deserialize<uint16_t>(b_ptr, max_size));
+                case FieldType::BaseType::UINT32: return static_cast<T>(deserialize<uint32_t>(b_ptr, max_size));
+                case FieldType::BaseType::UINT64: return static_cast<T>(deserialize<uint64_t>(b_ptr, max_size));
+                case FieldType::BaseType::INT8: return static_cast<T>(deserialize<int8_t>(b_ptr, max_size));
+                case FieldType::BaseType::INT16: return static_cast<T>(deserialize<int16_t>(b_ptr, max_size));
+                case FieldType::BaseType::INT32: return static_cast<T>(deserialize<int32_t>(b_ptr, max_size));
+                case FieldType::BaseType::INT64: return static_cast<T>(deserialize<int64_t>(b_ptr, max_size));
+                case FieldType::BaseType::FLOAT: return static_cast<T>(deserialize<float>(b_ptr, max_size));
+                case FieldType::BaseType::DOUBLE: return static_cast<T>(deserialize<double>(b_ptr, max_size));
             }
             throw std::runtime_error("Unknown base type"); // should never happen
         }

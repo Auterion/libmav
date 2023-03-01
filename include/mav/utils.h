@@ -54,8 +54,14 @@ namespace mav {
 
 
     template <typename T>
-    inline T deserialize(const uint8_t* source) {
-        return *static_cast<const T*>(static_cast<const void*>(source));
+    inline T deserialize(const uint8_t* source, uint32_t deserialize_size) {
+        if (deserialize_size == sizeof(T)) {
+            return *static_cast<const T*>(static_cast<const void*>(source));
+        } else {
+            uint8_t deserialize_buff[sizeof(T)]{};
+            std::copy(source, source + std::min(deserialize_size, static_cast<uint32_t>(sizeof(T))), deserialize_buff);
+            return *static_cast<const T*>(static_cast<const void*>(deserialize_buff));
+        }
     }
 
 
