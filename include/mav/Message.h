@@ -62,7 +62,11 @@ namespace mav {
                 _crc_offset(crc_offset),
                 _backing_memory(std::move(backing_memory)) {}
 
-        inline void _clearCRC() {
+        inline bool isFinalized() const {
+            return _crc_offset >= 0;
+        }
+
+        inline void _unFinalize() {
             if (_crc_offset >= 0) {
                 std::fill(_backing_memory.begin() + _crc_offset,
                           _backing_memory.begin() + _backing_memory.size(), 0);
@@ -73,7 +77,7 @@ namespace mav {
         template <typename T>
         void _writeSingle(const Field &field, const T &v, int in_field_offset = 0) {
             // any write will potentially change the crc offset, so we invalidate it
-            _clearCRC();
+            _unFinalize();
             // make sure that we only have simplistic base types here
             static_assert(is_any<std::decay_t<T>, short, int, long, unsigned int, unsigned long,
                     char, uint8_t, int8_t, uint16_t, int16_t, uint32_t, int32_t, uint64_t, int64_t, float, double
@@ -101,7 +105,7 @@ namespace mav {
         template <typename T>
         inline T _readSingle(const Field &field, int in_field_offset = 0) const {
             int data_offset = field.offset + in_field_offset;
-            int max_size = _crc_offset >= 0 ? _crc_offset - data_offset : field.type.baseSize();
+            int max_size = isFinalized() ? _crc_offset - data_offset : field.type.baseSize();
             const uint8_t* b_ptr = _backing_memory.data() + data_offset;
             switch (field.type.base_type) {
                 case FieldType::BaseType::CHAR: return static_cast<T>(deserialize<char>(b_ptr, max_size));
@@ -324,9 +328,8 @@ namespace mav {
                 throw std::invalid_argument(StringFormat() << "Field " << field_key <<
                                                         " is not of type char" << StringFormat::end);
             }
-            int max_string_length = _crc_offset < 0 ?
-                    field.type.size :
-                    std::min(field.type.size, _crc_offset - field.offset);
+            int max_string_length = isFinalized() ?
+                    std::min(field.type.size, _crc_offset - field.offset) : field.type.size;
             int real_string_length = strnlen(_backing_memory.data() + field.offset, max_string_length);
 
             return std::string{reinterpret_cast<const char*>(_backing_memory.data() + field.offset),
@@ -376,6 +379,10 @@ namespace mav {
         }
 
         [[nodiscard]] uint32_t finalize(uint8_t seq, const Identifier &sender) {
+            if (isFinalized()) {
+                _unFinalize();
+            }
+
             auto last_nonzero = std::find_if(_backing_memory.rend() -
                     MessageDefinition::HEADER_SIZE - _message_definition->maxPayloadSize(),
                     _backing_memory.rend(), [](const auto &v) {
