@@ -76,6 +76,14 @@ TEST_CASE("Message set creation") {
         CHECK_EQ(message.get<int64_t>("int64_field"), 34);
     }
 
+    SUBCASE("Double-finalize does not change anything") {
+        message.set("int64_field", 34); // since largest field, will be at the end of the message
+        CHECK_EQ(message.get<int64_t>("int64_field"), 34);
+        auto ret = message.finalize(1, {2,3});
+        CHECK_EQ(message.get<int64_t>("int64_field"), 34);
+        ret = message.finalize(1, {2,3});
+        CHECK_EQ(message.get<int64_t>("int64_field"), 34);
+    }
 
     SUBCASE("Can set and get values with assignment API") {
         message["uint8_field"] = 0x12;

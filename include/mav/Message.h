@@ -376,15 +376,24 @@ namespace mav {
         }
 
         [[nodiscard]] uint32_t finalize(uint8_t seq, const Identifier &sender) {
-            auto last_nonzero = std::find_if(_backing_memory.rend() -
-                    MessageDefinition::HEADER_SIZE - _message_definition->maxPayloadSize(),
-                    _backing_memory.rend(), [](const auto &v) {
-                return v != 0;
-            });
+            int payload_size;
+            if (_crc_offset < 0) {
+                // If we don't have a CRC offset, we need to find the payload size by finding the last
+                // non-zero byte in the message.
+                auto last_nonzero = std::find_if(_backing_memory.rend() -
+                     MessageDefinition::HEADER_SIZE - _message_definition->maxPayloadSize(),
+                     _backing_memory.rend(), [](const auto &v) {
+                            return v != 0;
+                    });
 
-            int payload_size = std::max(
-                    static_cast<int>(std::distance(last_nonzero, _backing_memory.rend()))
-                            - MessageDefinition::HEADER_SIZE, 1);
+                payload_size = std::max(
+                        static_cast<int>(std::distance(last_nonzero, _backing_memory.rend()))
+                        - MessageDefinition::HEADER_SIZE, 1);
+            } else {
+                // if we have a CRC offset, the payload since the last CRC calculation,
+                // so we can just use the offset.
+                payload_size = _crc_offset - MessageDefinition::HEADER_SIZE;
+            }
 
             header().magic() = 0xFD;
             header().len() = payload_size;
