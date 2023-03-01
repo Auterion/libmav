@@ -52,7 +52,7 @@ TEST_CASE("UDP server client") {
     )"""");
 
     REQUIRE(message_set.contains("BIG_MESSAGE"));
-    REQUIRE((message_set.size() == 2));
+    REQUIRE_EQ(message_set.size(), 2);
 
     SUBCASE("Can connect server client UDP") {
         // setup server
@@ -105,7 +105,7 @@ TEST_CASE("UDP server client") {
                                                            }));
             auto client_message = client->receive(client_expectation, 100);
 
-            CHECK((client_message["char_arr_field"].as<std::string>() == "hello client"));
+            CHECK_EQ(client_message["char_arr_field"].as<std::string>(), "hello client");
         }
 
         SUBCASE("Can send message from client to server with UDP") {
@@ -127,7 +127,7 @@ TEST_CASE("UDP server client") {
                                                                    {"extension_uint8_field", 7},
                                                            }));
             auto server_message = server->receive(server_expectation, 100);
-            CHECK((server_message["char_arr_field"].as<std::string>() == "hello server"));
+            CHECK_EQ(server_message["char_arr_field"].as<std::string>(), "hello server");
         }
 
     }

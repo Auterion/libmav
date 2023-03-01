@@ -35,7 +35,7 @@ TEST_CASE("Message field iterator") {
 )"""");
 
     REQUIRE(message_set.contains("BIG_MESSAGE"));
-    REQUIRE(message_set.size() == 1);
+    REQUIRE_EQ(message_set.size(), 1);
 
     auto message = message_set.create("BIG_MESSAGE");
     message.set("uint8_field", 1);
@@ -74,11 +74,11 @@ TEST_CASE("Message field iterator") {
 
 
         for (const auto& [key, value] : FieldIterate(message)) {
-            REQUIRE(expect_set.size() > 0);
+            REQUIRE_GT(expect_set.size(), 0);
 
             auto expect = expect_set.find(key);
-            CHECK(expect != expect_set.end());
-            CHECK(value == expect->second);
+            CHECK_NE(expect, expect_set.end());
+            CHECK_EQ(value, expect->second);
         }
     }
 

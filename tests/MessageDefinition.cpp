@@ -35,39 +35,39 @@ TEST_CASE("Message set methods") {
     )"""");
 
     REQUIRE(message_set.contains("BIG_MESSAGE"));
-    REQUIRE(message_set.size() == 1);
+    REQUIRE_EQ(message_set.size(), 1);
     auto message = message_set.create("BIG_MESSAGE");
     auto& definition = message.type();
 
     SUBCASE("Getters") {
-        CHECK(definition.name() == "BIG_MESSAGE");
-        CHECK(definition.id() == 9915);
-        CHECK(definition.fieldDefinitions().size() == 14);
-        CHECK(definition.fieldNames().size() == 14);
+        CHECK_EQ(definition.name(), "BIG_MESSAGE");
+        CHECK_EQ(definition.id(), 9915);
+        CHECK_EQ(definition.fieldDefinitions().size(), 14);
+        CHECK_EQ(definition.fieldNames().size(), 14);
     }
 
     SUBCASE("MAVLink specs") {
-        CHECK(definition.maxBufferLength() == 112);
-        CHECK(definition.crcExtra() == 0x59);
+        CHECK_EQ(definition.maxBufferLength(), 112);
+        CHECK_EQ(definition.crcExtra(), 0x59);
     }
 
     SUBCASE("Get field for name") {
-        CHECK(definition.fieldForName("uint8_field").type.base_type == FieldType::BaseType::UINT8);
-        CHECK(definition.fieldForName("int8_field").type.base_type == FieldType::BaseType::INT8);
-        CHECK(definition.fieldForName("uint16_field").type.base_type == FieldType::BaseType::UINT16);
-        CHECK(definition.fieldForName("int16_field").type.base_type == FieldType::BaseType::INT16);
-        CHECK(definition.fieldForName("uint32_field").type.base_type == FieldType::BaseType::UINT32);
-        CHECK(definition.fieldForName("int32_field").type.base_type == FieldType::BaseType::INT32);
-        CHECK(definition.fieldForName("uint64_field").type.base_type == FieldType::BaseType::UINT64);
-        CHECK(definition.fieldForName("int64_field").type.base_type == FieldType::BaseType::INT64);
-        CHECK(definition.fieldForName("double_field").type.base_type == FieldType::BaseType::DOUBLE);
-        CHECK(definition.fieldForName("float_field").type.base_type == FieldType::BaseType::FLOAT);
-        CHECK(definition.fieldForName("char_arr_field").type.base_type == FieldType::BaseType::CHAR);
-        CHECK(definition.fieldForName("float_arr_field").type.base_type == FieldType::BaseType::FLOAT);
-        CHECK(definition.fieldForName("int32_arr_field").type.base_type == FieldType::BaseType::INT32);
-        CHECK(definition.fieldForName("char_arr_field").type.size == 20);
-        CHECK(definition.fieldForName("float_arr_field").type.size == 3);
-        CHECK(definition.fieldForName("int32_arr_field").type.size == 3);
+        CHECK_EQ(definition.fieldForName("uint8_field").type.base_type, FieldType::BaseType::UINT8);
+        CHECK_EQ(definition.fieldForName("int8_field").type.base_type, FieldType::BaseType::INT8);
+        CHECK_EQ(definition.fieldForName("uint16_field").type.base_type, FieldType::BaseType::UINT16);
+        CHECK_EQ(definition.fieldForName("int16_field").type.base_type, FieldType::BaseType::INT16);
+        CHECK_EQ(definition.fieldForName("uint32_field").type.base_type, FieldType::BaseType::UINT32);
+        CHECK_EQ(definition.fieldForName("int32_field").type.base_type, FieldType::BaseType::INT32);
+        CHECK_EQ(definition.fieldForName("uint64_field").type.base_type, FieldType::BaseType::UINT64);
+        CHECK_EQ(definition.fieldForName("int64_field").type.base_type, FieldType::BaseType::INT64);
+        CHECK_EQ(definition.fieldForName("double_field").type.base_type, FieldType::BaseType::DOUBLE);
+        CHECK_EQ(definition.fieldForName("float_field").type.base_type, FieldType::BaseType::FLOAT);
+        CHECK_EQ(definition.fieldForName("char_arr_field").type.base_type, FieldType::BaseType::CHAR);
+        CHECK_EQ(definition.fieldForName("float_arr_field").type.base_type, FieldType::BaseType::FLOAT);
+        CHECK_EQ(definition.fieldForName("int32_arr_field").type.base_type, FieldType::BaseType::INT32);
+        CHECK_EQ(definition.fieldForName("char_arr_field").type.size, 20);
+        CHECK_EQ(definition.fieldForName("float_arr_field").type.size, 3);
+        CHECK_EQ(definition.fieldForName("int32_arr_field").type.size, 3);
     }
 
     SUBCASE("Get non existing field") {

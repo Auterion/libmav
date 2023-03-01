@@ -26,7 +26,7 @@ TEST_CASE("Message set creation") {
     MessageSet message_set{file_name};
     std::remove(file_name.c_str());
 
-    CHECK(message_set.size() == 2);
+    CHECK_EQ(message_set.size(), 2);
 
     SUBCASE("Can not parse incomplete XML") {
         CHECK_THROWS_AS(message_set.addFromXMLString(""), std::runtime_error);
@@ -59,8 +59,8 @@ TEST_CASE("Message set creation") {
         CHECK(message_set.contains("TEMPERATURE_MEASUREMENT"));
         SUBCASE("Can create message from name") {
             auto message = message_set.create("TEMPERATURE_MEASUREMENT");
-            CHECK(message.id() == message_set.idForMessage("TEMPERATURE_MEASUREMENT"));
-            CHECK(message.name() == "TEMPERATURE_MEASUREMENT");
+            CHECK_EQ(message.id(), message_set.idForMessage("TEMPERATURE_MEASUREMENT"));
+            CHECK_EQ(message.name(), "TEMPERATURE_MEASUREMENT");
         }
     }
 }
@@ -73,16 +73,16 @@ TEST_CASE("Create messages from set") {
     REQUIRE(message_set.contains("HEARTBEAT"));
     SUBCASE("Can create message from name") {
         auto message = message_set.create("HEARTBEAT");
-        CHECK(message.id() == message_set.idForMessage("HEARTBEAT"));
-        CHECK(message.name() == "HEARTBEAT");
+        CHECK_EQ(message.id(), message_set.idForMessage("HEARTBEAT"));
+        CHECK_EQ(message.name(), "HEARTBEAT");
     }
 
     SUBCASE("Can create message from id") {
         int id = message_set.idForMessage("PROTOCOL_VERSION");
-        CHECK(id == 300);
+        CHECK_EQ(id, 300);
         auto message = message_set.create(id);
-        CHECK(message.id() == id);
-        CHECK(message.name() == "PROTOCOL_VERSION");
+        CHECK_EQ(message.id(), id);
+        CHECK_EQ(message.name(), "PROTOCOL_VERSION");
     }
 
     SUBCASE("Can not get id for invalid message") {
@@ -91,15 +91,15 @@ TEST_CASE("Create messages from set") {
 
     SUBCASE("Can not get invalid message definition") {
         auto definition = message_set.getMessageDefinition("NOT_A_MESSAGE");
-        CHECK(definition == false);
+        CHECK_EQ(definition, false);
         definition = message_set.getMessageDefinition(-1);
-        CHECK(definition == false);
+        CHECK_EQ(definition, false);
     }
 
     SUBCASE("Can get message definition from name") {
         auto definition = message_set.getMessageDefinition("HEARTBEAT");
-        CHECK(definition != false);
-        CHECK(definition.get().name() == "HEARTBEAT");
+        CHECK_NE(definition, false);
+        CHECK_EQ(definition.get().name(), "HEARTBEAT");
 
         SUBCASE("Message definition contains fields") {
             CHECK(definition.get().containsField("type"));

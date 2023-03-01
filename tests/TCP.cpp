@@ -39,7 +39,7 @@ TEST_CASE("TCP server client") {
     )"""");
 
     REQUIRE(message_set.contains("TEST_MESSAGE"));
-    REQUIRE((message_set.size() == 2));
+    REQUIRE_EQ(message_set.size(), 2);
 
     SUBCASE("Can connect TCP server client") {
         // setup server

@@ -109,7 +109,7 @@ TEST_CASE("Create network runtime") {
     )");
 
     REQUIRE(message_set.contains("HEARTBEAT"));
-    REQUIRE(message_set.size() == 1);
+    REQUIRE_EQ(message_set.size(), 1);
 
     ConnectionPartner interface_partner = {0x0a290101, 14550, false};
     ConnectionPartner interface_wrong_partner = {0x0a290103, 14550, false};
@@ -141,13 +141,13 @@ TEST_CASE("Create network runtime") {
         auto expectation = connection->expect("HEARTBEAT");
         interface.addToReceiveQueue("\xfd\x09\x00\x00\x00\x01\x01\x00\x00\x00\x04\x00\x00\x00\x01\x02\x03\x05\x06\x46\x61"s, interface_partner);
         auto message = connection->receive(expectation);
-        CHECK(message.name() == "HEARTBEAT");
-        CHECK(message.get<int>("type") == 1);
-        CHECK(message.get<int>("autopilot") == 2);
-        CHECK(message.get<int>("base_mode") == 3);
-        CHECK(message.get<int>("custom_mode") == 4);
-        CHECK(message.get<int>("system_status") == 5);
-        CHECK(message.get<int>("mavlink_version") == 6);
+        CHECK_EQ(message.name(), "HEARTBEAT");
+        CHECK_EQ(message.get<int>("type"), 1);
+        CHECK_EQ(message.get<int>("autopilot"), 2);
+        CHECK_EQ(message.get<int>("base_mode"), 3);
+        CHECK_EQ(message.get<int>("custom_mode"), 4);
+        CHECK_EQ(message.get<int>("system_status"), 5);
+        CHECK_EQ(message.get<int>("mavlink_version"), 6);
     }
 
     SUBCASE("Can not receive message from wrong partner") {
