@@ -150,6 +150,16 @@ TEST_CASE("Create network runtime") {
         CHECK_EQ(message.get<int>("mavlink_version"), 6);
     }
 
+
+    SUBCASE("Message sent twice before receive") {
+        interface.reset();
+        auto expectation = connection->expect("HEARTBEAT");
+        interface.addToReceiveQueue("\xfd\x09\x00\x00\x00\x01\x01\x00\x00\x00\x04\x00\x00\x00\x01\x02\x03\x05\x06\x46\x61"s, interface_partner);
+        interface.addToReceiveQueue("\xfd\x09\x00\x00\x00\x01\x01\x00\x00\x00\x04\x00\x00\x00\x01\x02\x03\x05\x06\x46\x61"s, interface_partner);
+        auto message = connection->receive(expectation);
+        CHECK_EQ(message.name(), "HEARTBEAT");
+    }
+
     SUBCASE("Can not receive message from wrong partner") {
         interface.reset();
         auto expectation = connection->expect("HEARTBEAT");
@@ -177,8 +187,4 @@ TEST_CASE("Create network runtime") {
         interface.makeFailOnNextReceive();
         CHECK_THROWS_AS(auto message = connection->receive(expectation), NetworkError);
     }
-
 }
-
-
-

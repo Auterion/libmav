@@ -165,6 +165,7 @@ namespace mav {
                 } catch (NetworkError &e) {
                     _should_terminate.store(true);
                     // Spread the network error to all connections
+                    std::lock_guard<std::mutex> lock(_connections_mutex);
                     for (auto& connection : _connections) {
                         connection.second->consumeNetworkExceptionFromNetwork(std::make_exception_ptr(e));
                     }

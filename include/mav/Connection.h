@@ -24,10 +24,21 @@ namespace mav {
     class Connection {
     private:
 
-        struct Callback {
+        struct FunctionCallback {
             std::function<void(const Message &message)> callback;
             std::function<void(const std::exception_ptr& exception)> error_callback;
         };
+
+        using Expectation = std::shared_ptr<std::promise<Message>>;
+
+        struct PromiseCallback {
+            Expectation promise;
+            int message_id;
+            int system_id;
+            int component_id;
+        };
+
+        using Callback = std::variant<FunctionCallback, PromiseCallback>;
 
         static constexpr int CONNECTION_TIMEOUT = 3000;
 
@@ -60,29 +71,54 @@ namespace mav {
         }
 
         void consumeMessageFromNetwork(const Message& message) {
-
             // in case we received a heartbeat, update last heartbeat time, to keep the connection alive.
             if (message.header().msgId() == _heartbeat_message_id) {
                 _last_heartbeat_ms = millis();
             }
             {
                 std::scoped_lock<std::mutex> lock(_message_callback_mtx);
-                for (const auto& item : _message_callbacks) {
-                    const Callback &callback = item.second;
-                    if (callback.callback) {
-                        callback.callback(message);
-                    }
+                auto it = _message_callbacks.begin();
+                while (it != _message_callbacks.end()) {
+                    Callback &callback = it->second;
+                    std::visit([this, &message, &it](auto&& arg) {
+                        using T = std::decay_t<decltype(arg)>;
+                        if constexpr (std::is_same_v<T, FunctionCallback>) {
+                            if (arg.callback) {
+                                arg.callback(message);
+                            }
+                            it++;
+                        } else if constexpr (std::is_same_v<T, PromiseCallback>) {
+                            if (message.id() == arg.message_id &&
+                                    (arg.system_id == mav::ANY_ID || message.header().systemId() == arg.system_id) &&
+                                    (arg.component_id == mav::ANY_ID || message.header().componentId() == arg.component_id)) {
+                                arg.promise->set_value(message);
+                                it = _message_callbacks.erase(it);
+                            } else {
+                                it++;
+                            }
+                        }
+                    }, callback);
                 }
             }
         }
 
         void consumeNetworkExceptionFromNetwork(const std::exception_ptr& exception) {
             std::scoped_lock<std::mutex> lock(_message_callback_mtx);
-            for (const auto& item : _message_callbacks) {
-                const Callback &callback = item.second;
-                if (callback.error_callback) {
-                    callback.error_callback(exception);
-                }
+            auto it = _message_callbacks.begin();
+            while (it != _message_callbacks.end()) {
+                Callback &callback = it->second;
+                std::visit([this, &exception, &it](auto&& arg) {
+                    using T = std::decay_t<decltype(arg)>;
+                    if constexpr (std::is_same_v<T, FunctionCallback>) {
+                        if (arg.error_callback) {
+                            arg.error_callback(exception);
+                        }
+                        it++;
+                    } else if constexpr (std::is_same_v<T, PromiseCallback>) {
+                        arg.promise->set_exception(exception);
+                        it = _message_callbacks.erase(it);
+                    }
+                }, callback);
             }
         }
 
@@ -112,7 +148,7 @@ namespace mav {
         CallbackHandle addMessageCallback(const T &on_message, const E &on_error) {
             std::scoped_lock<std::mutex> lock(_message_callback_mtx);
             CallbackHandle handle = _next_handle;
-            _message_callbacks[handle] = {on_message, on_error};
+            _message_callbacks[handle] = FunctionCallback{on_message, on_error};
             _next_handle++;
             return handle;
         }
@@ -128,32 +164,17 @@ namespace mav {
         }
 
 
-        class Expectation {
-            friend Connection;
-        private:
-            CallbackHandle _handle;
-            std::shared_ptr<std::promise<Message>> _promise;
-        public:
-            Expectation(CallbackHandle handle, std::shared_ptr<std::promise<Message>> promise) : _handle(handle),
-            _promise(std::move(promise)) {}
-        };
-
-
         [[nodiscard]] Expectation expect(int message_id, int source_id=mav::ANY_ID,
                                          int component_id=mav::ANY_ID) {
+
+            auto promise = std::make_shared<std::promise<Message>>();
+            std::scoped_lock<std::mutex> lock(_message_callback_mtx);
+            CallbackHandle handle = _next_handle;
+            _message_callbacks[handle] = PromiseCallback{promise, message_id, source_id, component_id};
+            _next_handle++;
+
             auto prom = std::make_shared<std::promise<Message>>();
-            CallbackHandle handle = addMessageCallback(
-                    [prom, message_id, source_id, component_id](const Message &message) {
-                if (message.id() == message_id) {
-                    if ((source_id == mav::ANY_ID || message.header().systemId() == source_id) &&
-                            (component_id == mav::ANY_ID || message.header().componentId() == component_id)) {
-                        prom->set_value(message);
-                    }
-                }
-            }, [prom](const std::exception_ptr& exception) {
-                prom->set_exception(exception);
-            });
-            return {handle, prom};
+            return promise;
         }
 
         [[nodiscard]] inline Expectation expect(const std::string &message_name, int source_id=mav::ANY_ID,
@@ -161,18 +182,16 @@ namespace mav {
             return expect(_message_set.idForMessage(message_name), source_id, component_id);
         }
 
-        Message receive(const Expectation &expectation, int timeout_ms=-1) {
-            auto fut = expectation._promise->get_future();
+        Message receive(const Expectation &expectation, int timeout_ms=-1) const {
+            auto fut = expectation->get_future();
             if (timeout_ms >= 0) {
                 if (fut.wait_for(std::chrono::milliseconds(timeout_ms)) == std::future_status::timeout) {
-                    removeMessageCallback(expectation._handle);
                     throw TimeoutException("Expected message timed out");
                 }
             } else {
                 fut.wait();
             }
             auto message = fut.get();
-            removeMessageCallback(expectation._handle);
             return message;
         }
 
