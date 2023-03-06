@@ -60,6 +60,11 @@ namespace mav {
 
     public:
 
+        void removeAllCallbacks() {
+            std::scoped_lock<std::mutex> lock(_message_callback_mtx);
+            _message_callbacks.clear();
+        }
+
         Connection(const MessageSet &message_set, ConnectionPartner partner) :
         _message_set(message_set), _partner(partner) {
             _heartbeat_message_id = _message_set.idForMessage("HEARTBEAT");
