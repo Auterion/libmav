@@ -403,8 +403,12 @@ namespace mav {
             header().incompatFlags() = 0;
             header().compatFlags() = 0;
             header().seq() = seq;
-            header().systemId() = sender.system_id;
-            header().componentId() = sender.component_id;
+            if (header().systemId() == 0) {
+                header().systemId() = sender.system_id;
+            }
+            if (header().componentId() == 0) {
+                header().componentId() = sender.component_id;
+            }
             header().msgId() = _message_definition->id();
 
             CRC crc;
