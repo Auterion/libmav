@@ -47,19 +47,21 @@ namespace mav {
         friend MessageSet;
     private:
         ConnectionPartner _source_partner;
-        std::array<uint8_t, MessageDefinition::MAX_MESSAGE_SIZE> _backing_memory{};
+        std::array<uint8_t, MAX_MESSAGE_SIZE> _backing_memory{};
         const MessageDefinition* _message_definition;
         int _crc_offset = -1;
+        bool _finalized_as_v1;
 
         explicit Message(const MessageDefinition &message_definition) :
             _message_definition(&message_definition) {
         }
 
         Message(const MessageDefinition &message_definition, ConnectionPartner source_partner, int crc_offset,
-                std::array<uint8_t, MessageDefinition::MAX_MESSAGE_SIZE> &&backing_memory) :
+                bool is_v1, std::array<uint8_t, MAX_MESSAGE_SIZE> &&backing_memory) :
                 _message_definition(&message_definition),
                 _source_partner(source_partner),
                 _crc_offset(crc_offset),
+                _finalized_as_v1(is_v1),
                 _backing_memory(std::move(backing_memory)) {}
 
         inline bool isFinalized() const {
@@ -71,6 +73,8 @@ namespace mav {
                 std::fill(_backing_memory.begin() + _crc_offset,
                           _backing_memory.begin() + _backing_memory.size(), 0);
                 _crc_offset = -1;
+                // an un finalized message is always considered v2
+                _finalized_as_v1 = false;
             }
         }
 
@@ -126,8 +130,8 @@ namespace mav {
     public:
 
         static inline Message _instantiateFromMemory(const MessageDefinition &definition, ConnectionPartner source_partner,
-                                          int crc_offset, std::array<uint8_t, MessageDefinition::MAX_MESSAGE_SIZE> &&backing_memory) {
-            return Message{definition, source_partner, crc_offset, std::move(backing_memory)};
+                                          int crc_offset, bool is_v1, std::array<uint8_t, MAX_MESSAGE_SIZE> &&backing_memory) {
+            return Message{definition, source_partner, crc_offset, is_v1, std::move(backing_memory)};
         }
 
         using _InitPairType = std::pair<const std::string, NativeVariantType>;
@@ -185,11 +189,11 @@ namespace mav {
         }
 
         [[nodiscard]] const Header<const uint8_t*> header() const {
-            return Header<const uint8_t*>(_backing_memory.data());
+            return Header<const uint8_t*>(_backing_memory.data(), _finalized_as_v1);
         }
 
         [[nodiscard]] Header<uint8_t*> header() {
-            return Header<uint8_t*>(_backing_memory.data());
+            return Header<uint8_t*>(_backing_memory.data(), _finalized_as_v1);
         }
 
         [[nodiscard]] const ConnectionPartner& source() const {
@@ -383,25 +387,33 @@ namespace mav {
             }
         }
 
-        [[nodiscard]] uint32_t finalize(uint8_t seq, const Identifier &sender) {
+        [[nodiscard]] uint32_t finalize(uint8_t seq, const Identifier &sender, bool finalize_as_v1 = false) {
             if (isFinalized()) {
                 _unFinalize();
             }
+            _finalized_as_v1 = finalize_as_v1;
 
-            auto last_nonzero = std::find_if(_backing_memory.rend() -
-                    MessageDefinition::HEADER_SIZE - _message_definition->maxPayloadSize(),
-                    _backing_memory.rend(), [](const auto &v) {
-                return v != 0;
-            });
+            int payload_size = -1;
+            if (_finalized_as_v1) {
+                // v1 does not do zero truncation
+                payload_size = _message_definition->maxPayloadSize();
+            } else {
+                auto last_nonzero = std::find_if(_backing_memory.rend() -
+                                                 HEADER_SIZE - _message_definition->maxPayloadSize(),
+                                                 _backing_memory.rend(), [](const auto &v) {
+                            return v != 0;
+                        });
+                payload_size = std::max(
+                        static_cast<int>(std::distance(last_nonzero, _backing_memory.rend()))
+                        - HEADER_SIZE, 1);
+            }
 
-            int payload_size = std::max(
-                    static_cast<int>(std::distance(last_nonzero, _backing_memory.rend()))
-                            - MessageDefinition::HEADER_SIZE, 1);
-
-            header().magic() = 0xFD;
+            header().magic() = _finalized_as_v1 ? 0xFE : 0xFD;
             header().len() = payload_size;
-            header().incompatFlags() = 0;
-            header().compatFlags() = 0;
+            if (!_finalized_as_v1) {
+                header().incompatFlags() = 0;
+                header().compatFlags() = 0;
+            }
             header().seq() = seq;
             if (header().systemId() == 0) {
                 header().systemId() = sender.system_id;
@@ -412,16 +424,25 @@ namespace mav {
             header().msgId() = _message_definition->id();
 
             CRC crc;
-            crc.accumulate(_backing_memory.begin() + 1, _backing_memory.begin() +
-                MessageDefinition::HEADER_SIZE + payload_size);
+            crc.accumulate(_finalized_as_v1 ?
+                (_backing_memory.begin() + V1_HEADER_OFFSET + 1) : (_backing_memory.begin() + 1),
+                           _backing_memory.begin() +
+                HEADER_SIZE + payload_size);
             crc.accumulate(_message_definition->crcExtra());
-            _crc_offset = MessageDefinition::HEADER_SIZE + payload_size;
+            _crc_offset = HEADER_SIZE + payload_size;
             serialize(crc.crc16(), _backing_memory.data() + _crc_offset);
 
-            return MessageDefinition::HEADER_SIZE + payload_size + MessageDefinition::CHECKSUM_SIZE;
+            int total_size = HEADER_SIZE + payload_size + CHECKSUM_SIZE;
+            if (_finalized_as_v1) {
+                total_size -= V1_HEADER_OFFSET;
+            }
+            return total_size;
         }
 
         [[nodiscard]] const uint8_t* data() const {
+            if (_finalized_as_v1) {
+                return _backing_memory.data() + V1_HEADER_OFFSET;
+            }
             return _backing_memory.data();
         };
     };

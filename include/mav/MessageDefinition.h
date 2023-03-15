@@ -17,6 +17,13 @@ namespace mav {
     constexpr int ANY_ID = -1;
     constexpr int LIBMAV_DEFAULT_ID = 97;
 
+    constexpr int V1_HEADER_OFFSET = 4;
+    constexpr int HEADER_SIZE = 10;
+
+    constexpr int MAX_PAYLOAD_SIZE = 255;
+    constexpr int CHECKSUM_SIZE = 2;
+    constexpr int SIGNATURE_SIZE = 13;
+    constexpr int MAX_MESSAGE_SIZE = MAX_PAYLOAD_SIZE + HEADER_SIZE + CHECKSUM_SIZE + SIGNATURE_SIZE;
 
     struct ConnectionPartner {
         uint32_t _address;
@@ -103,18 +110,27 @@ namespace mav {
     class Header {
     private:
         BackingMemoryPointerType _backing_memory;
+        bool _is_v1;
 
         class _MsgId {
         private:
             BackingMemoryPointerType _ptr;
+            bool _is_v1;
         public:
-            explicit _MsgId(BackingMemoryPointerType ptr) : _ptr(ptr) {}
+            explicit _MsgId(BackingMemoryPointerType ptr, bool is_v1) : _ptr(ptr), _is_v1(is_v1) {}
 
             operator int() const {
+                if (_is_v1) {
+                    return static_cast<int>(_ptr[0]);
+                }
                 return static_cast<int>((*static_cast<const uint32_t*>(static_cast<const void*>(_ptr))) & 0xFFFFFF);
             }
 
             _MsgId& operator=(int v) {
+                if (_is_v1) {
+                    _ptr[0] = static_cast<uint8_t>(v & 0xFF);
+                    return *this;
+                }
                 _ptr[0] = static_cast<uint8_t>(v & 0xFF);
                 _ptr[1] = static_cast<uint8_t>((v >> 8) & 0xFF);
                 _ptr[2] = static_cast<uint8_t>((v >> 16) & 0xFF);
@@ -123,21 +139,33 @@ namespace mav {
         };
 
     public:
-        explicit Header(BackingMemoryPointerType backing_memory) : _backing_memory(backing_memory) {}
+        explicit Header(BackingMemoryPointerType backing_memory, bool is_v1) : _backing_memory(backing_memory), _is_v1(is_v1) {}
 
         inline uint8_t& magic(){
+            if (_is_v1) {
+                return _backing_memory[V1_HEADER_OFFSET];
+            }
             return _backing_memory[0];
         }
 
         [[nodiscard]] inline uint8_t magic() const {
+            if (_is_v1) {
+                return _backing_memory[V1_HEADER_OFFSET];
+            }
             return _backing_memory[0];
         }
 
         inline uint8_t& len() {
+            if (_is_v1) {
+                return _backing_memory[V1_HEADER_OFFSET + 1];
+            }
             return _backing_memory[1];
         }
 
         [[nodiscard]] inline uint8_t len() const {
+            if (_is_v1) {
+                return _backing_memory[V1_HEADER_OFFSET + 1];
+            }
             return _backing_memory[1];
         }
 
@@ -158,35 +186,59 @@ namespace mav {
         }
 
         inline uint8_t& seq() {
+            if (_is_v1) {
+                return _backing_memory[V1_HEADER_OFFSET + 2];
+            }
             return _backing_memory[4];
         }
 
         [[nodiscard]] inline uint8_t seq() const {
+            if (_is_v1) {
+                return _backing_memory[V1_HEADER_OFFSET + 2];
+            }
             return _backing_memory[4];
         }
 
         inline uint8_t& systemId() {
+            if (_is_v1) {
+                return _backing_memory[V1_HEADER_OFFSET + 3];
+            }
             return _backing_memory[5];
         }
 
         [[nodiscard]] inline uint8_t systemId() const {
+            if (_is_v1) {
+                return _backing_memory[V1_HEADER_OFFSET + 3];
+            }
             return _backing_memory[5];
         }
 
         inline uint8_t& componentId() {
+            if (_is_v1) {
+                return _backing_memory[V1_HEADER_OFFSET + 4];
+            }
             return _backing_memory[6];
         }
 
         [[nodiscard]] inline uint8_t componentId() const {
+            if (_is_v1) {
+                return _backing_memory[V1_HEADER_OFFSET + 4];
+            }
             return _backing_memory[6];
         }
 
         inline _MsgId msgId() {
-            return _MsgId(_backing_memory + 7);
+            if (_is_v1) {
+                return _MsgId(_backing_memory + V1_HEADER_OFFSET + 5, true);
+            }
+            return _MsgId(_backing_memory + 7, false);
         }
 
         [[nodiscard]] inline _MsgId msgId() const {
-            return _MsgId(_backing_memory + 7);
+            if (_is_v1) {
+                return _MsgId(_backing_memory + V1_HEADER_OFFSET + 5, true);
+            }
+            return _MsgId(_backing_memory + 7, false);
         }
 
         [[nodiscard]] inline Identifier source() const {
@@ -275,11 +327,6 @@ namespace mav {
         {}
 
     public:
-        static constexpr int MAX_PAYLOAD_SIZE = 255;
-        static constexpr int HEADER_SIZE = 10;
-        static constexpr int CHECKSUM_SIZE = 2;
-        static constexpr int SIGNATURE_SIZE = 13;
-        static constexpr int MAX_MESSAGE_SIZE = MAX_PAYLOAD_SIZE + HEADER_SIZE + CHECKSUM_SIZE + SIGNATURE_SIZE;
 
         [[nodiscard]] inline const std::string& name() const {
             return _name;
@@ -366,7 +413,7 @@ namespace mav {
                                  return a.type.baseSize() > b.type.baseSize();
                              });
 
-            int offset = MessageDefinition::HEADER_SIZE;
+            int offset = HEADER_SIZE;
             CRC crc_extra;
             crc_extra.accumulate(_result._name);
             crc_extra.accumulate(" ");
@@ -391,8 +438,8 @@ namespace mav {
                 _result._fields.insert({field.name, {type, offset}});
                 offset = offset + (type.baseSize() * type.size);
             }
-            _result._max_payload_length = offset - MessageDefinition::HEADER_SIZE;
-            _result._max_buffer_length = offset + MessageDefinition::CHECKSUM_SIZE + MessageDefinition::SIGNATURE_SIZE;
+            _result._max_payload_length = offset - HEADER_SIZE;
+            _result._max_buffer_length = offset + CHECKSUM_SIZE + SIGNATURE_SIZE;
             return _result;
         }
     };

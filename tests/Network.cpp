@@ -188,3 +188,68 @@ TEST_CASE("Create network runtime") {
         CHECK_THROWS_AS(auto message = connection->receive(expectation), NetworkError);
     }
 }
+
+
+TEST_CASE("Create network with MAVLink V1") {
+
+    MessageSet message_set;
+    message_set.addFromXMLString(R"(
+        <mavlink>
+            <messages>
+                <message id="0" name="HEARTBEAT">
+                    <field type="uint8_t" name="type">Type of the MAV (quadrotor, helicopter, etc., up to 15 types, defined in MAV_TYPE ENUM)</field>
+                    <field type="uint8_t" name="autopilot">Autopilot type / class. defined in MAV_AUTOPILOT ENUM</field>
+                    <field type="uint8_t" name="base_mode">System mode bitfield, see MAV_MODE_FLAGS ENUM in mavlink/include/mavlink_types.h</field>
+                    <field type="uint32_t" name="custom_mode">A bitfield for use for autopilot-specific flags.</field>
+                    <field type="uint8_t" name="system_status">System status flag, see MAV_STATE ENUM</field>
+                    <field type="uint8_t" name="mavlink_version">MAVLink version, not writable by user, gets added by protocol because of magic data type: uint8_t_mavlink_version</field>
+                </message>
+            </messages>
+        </mavlink>
+    )");
+
+    REQUIRE(message_set.contains("HEARTBEAT"));
+    REQUIRE_EQ(message_set.size(), 1);
+
+    ConnectionPartner interface_partner = {0x0a290101, 14550, false};
+
+    DummyInterface interface;
+    NetworkRuntime network({253, 1}, message_set, interface, true);
+
+    //interface.addToReceiveQueue("\xfd\x09\x00\x00\x00\xfd\x01\x00\x00\x00\x04\x00\x00\x00\x01\x02\x03\x05\x06\x77\x53"s,
+    //                            interface_partner);
+    interface.addToReceiveQueue("\xfe\x09\x00\x01\x01\x00\x00\x00\x00\x00\x00\x0c\x00\x04\x01\xca\x45"s, interface_partner);
+
+    auto connection = network.awaitConnection();
+
+
+    SUBCASE("Can send message") {
+        interface.reset();
+        auto message = message_set.create("HEARTBEAT")({
+                                                               {"type", 1},
+                                                               {"autopilot", 2},
+                                                               {"base_mode", 3},
+                                                               {"custom_mode", 4},
+                                                               {"system_status", 5},
+                                                               {"mavlink_version", 6}});
+        connection->send(message);
+        bool found = (interface.sendSpongeContains(
+        "\xfe\x09\x00\xfd\x01\x00\x04\x00\x00\x00\x01\x02\x03\x05\x06\x83\xd3"s, interface_partner));
+        CHECK(found);
+    }
+
+    SUBCASE("Can receive message") {
+        interface.reset();
+        auto expectation = connection->expect("HEARTBEAT");
+        interface.addToReceiveQueue("\xfe\x09\x00\xfd\x01\x00\x04\x00\x00\x00\x01\x02\x03\x05\x06\x83\xd3"s, interface_partner);
+        auto message = connection->receive(expectation);
+        CHECK_EQ(message.name(), "HEARTBEAT");
+        CHECK_EQ(message.get<int>("type"), 1);
+        CHECK_EQ(message.get<int>("autopilot"), 2);
+        CHECK_EQ(message.get<int>("base_mode"), 3);
+        CHECK_EQ(message.get<int>("custom_mode"), 4);
+        CHECK_EQ(message.get<int>("system_status"), 5);
+        CHECK_EQ(message.get<int>("mavlink_version"), 6);
+    }
+
+}

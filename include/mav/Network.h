@@ -52,20 +52,21 @@ namespace mav {
 
         NetworkInterface& _interface;
         const MessageSet& _message_set;
+        const bool _is_v1;
 
         [[nodiscard]] bool _checkMagicByte() const {
             uint8_t v;
             _interface.receive(&v, 1);
-            return v == 0xFD;
+            return (v == 0xFD && !_is_v1) || (v == 0xFE && _is_v1);
         }
 
     public:
-        StreamParser(const MessageSet &message_set, NetworkInterface &interface) :
-        _interface(interface), _message_set(message_set) {}
+        StreamParser(const MessageSet &message_set, NetworkInterface &interface, bool is_v1) :
+        _interface(interface), _message_set(message_set), _is_v1(is_v1) {}
 
         [[nodiscard]] Message next() const {
 
-            std::array<uint8_t, MessageDefinition::MAX_MESSAGE_SIZE> backing_memory{};
+            std::array<uint8_t, MAX_MESSAGE_SIZE> backing_memory{};
             while (true) {
                 _interface.markMessageBoundary();
                 if (!_checkMagicByte()) {
@@ -74,15 +75,22 @@ namespace mav {
                     while (!_checkMagicByte()) {}
                 }
 
-                backing_memory[0] = 0xFD;
-                _interface.receive(backing_memory.data() + 1, MessageDefinition::HEADER_SIZE -1);
-                Header header{backing_memory.data()};
-                const bool message_is_signed = header.incompatFlags() & 0x01;
-                const int wire_length = MessageDefinition::HEADER_SIZE + header.len() + MessageDefinition::CHECKSUM_SIZE +
-                                  (message_is_signed ? MessageDefinition::SIGNATURE_SIZE : 0);
-                auto partner = _interface.receive(backing_memory.data() + MessageDefinition::HEADER_SIZE,
-                                   wire_length - MessageDefinition::HEADER_SIZE);
-                const int crc_offset = MessageDefinition::HEADER_SIZE + header.len();
+                if (_is_v1) {
+                    backing_memory[V1_HEADER_OFFSET] = 0xFE;
+                    _interface.receive(backing_memory.data() + V1_HEADER_OFFSET + 1,
+                                       HEADER_SIZE - V1_HEADER_OFFSET - 1);
+                } else {
+                    backing_memory[0] = 0xFD;
+                    _interface.receive(backing_memory.data() + 1,HEADER_SIZE - 1);
+                }
+
+                Header header{backing_memory.data(), _is_v1};
+                const bool message_is_signed = !_is_v1 && header.incompatFlags() & 0x01;
+                const int remaining_length = header.len() + CHECKSUM_SIZE +
+                                  (message_is_signed ? SIGNATURE_SIZE : 0);
+                auto partner = _interface.receive(backing_memory.data() + HEADER_SIZE,
+                                   remaining_length);
+                const int crc_offset = HEADER_SIZE + header.len();
 
                 auto definition_opt = _message_set.getMessageDefinition(header.msgId());
                 if (!definition_opt) {
@@ -93,14 +101,16 @@ namespace mav {
                 auto &definition = definition_opt.get();
 
                 CRC crc;
-                crc.accumulate(backing_memory.begin() + 1, backing_memory.begin() + crc_offset);
+                crc.accumulate(_is_v1 ?
+                               (backing_memory.begin() + V1_HEADER_OFFSET + 1) : (backing_memory.begin() + 1),
+                               backing_memory.begin() + crc_offset);
                 crc.accumulate(definition.crcExtra());
                 auto crc_received = deserialize<uint16_t>(backing_memory.data() + crc_offset, sizeof(uint16_t));
                 if (crc_received != crc.crc16()) {
                     // crc error. Try to re-sync.
                     continue;
                 }
-                return Message::_instantiateFromMemory(definition, partner, crc_offset, std::move(backing_memory));
+                return Message::_instantiateFromMemory(definition, partner, crc_offset, _is_v1, std::move(backing_memory));
             }
         }
     };
@@ -112,6 +122,7 @@ namespace mav {
         std::thread _receive_thread;
         std::thread _heartbeat_thread;
 
+        const bool _is_v1 = false;
         NetworkInterface& _interface;
         const MessageSet& _message_set;
         std::optional<Message> _heartbeat_message;
@@ -128,7 +139,7 @@ namespace mav {
         std::function<void(const std::shared_ptr<Connection>&)> _on_connection_lost;
 
         void _sendMessage(Message &message, const ConnectionPartner &partner) {
-            int wire_length = static_cast<int>(message.finalize(_seq++, _own_id));
+            int wire_length = static_cast<int>(message.finalize(_seq++, _own_id, _is_v1));
             std::unique_lock<std::mutex> lock(_send_mutex);
             _interface.send(message.data(), wire_length, partner);
         }
@@ -232,9 +243,9 @@ namespace mav {
 
 
     public:
-        NetworkRuntime(const Identifier &own_id, const MessageSet &message_set, NetworkInterface &interface) :
-                _own_id(own_id), _message_set(message_set),
-                _interface(interface), _parser(_message_set, _interface) {
+        NetworkRuntime(const Identifier &own_id, const MessageSet &message_set, NetworkInterface &interface, bool is_v1 = false) :
+                _own_id(own_id), _is_v1(is_v1), _message_set(message_set),
+                _interface(interface), _parser(_message_set, _interface, is_v1) {
 
             _receive_thread = std::thread{
                 [this]() {
@@ -249,17 +260,17 @@ namespace mav {
             };
         }
 
-        NetworkRuntime(const MessageSet &message_set, NetworkInterface &interface) :
+        NetworkRuntime(const MessageSet &message_set, NetworkInterface &interface, bool is_v1 = false) :
                 NetworkRuntime({LIBMAV_DEFAULT_ID, LIBMAV_DEFAULT_ID},
-                               message_set, interface) {}
+                               message_set, interface, is_v1) {}
 
-        NetworkRuntime(const Identifier &own_id, const MessageSet &message_set, const Message &heartbeat_message, NetworkInterface &interface) :
-                NetworkRuntime(own_id, message_set, interface) {
+        NetworkRuntime(const Identifier &own_id, const MessageSet &message_set, const Message &heartbeat_message, NetworkInterface &interface, bool is_v1 = false) :
+                NetworkRuntime(own_id, message_set, interface, is_v1) {
             setHeartbeatMessage(heartbeat_message);
         }
 
-        NetworkRuntime(const MessageSet &message_set, const Message &heartbeat_message, NetworkInterface &interface) :
-                NetworkRuntime({LIBMAV_DEFAULT_ID, LIBMAV_DEFAULT_ID}, message_set, heartbeat_message, interface) {}
+        NetworkRuntime(const MessageSet &message_set, const Message &heartbeat_message, NetworkInterface &interface, bool is_v1 = false) :
+                NetworkRuntime({LIBMAV_DEFAULT_ID, LIBMAV_DEFAULT_ID}, message_set, heartbeat_message, interface, is_v1) {}
 
 
         void onConnection(std::function<void(const std::shared_ptr<Connection>&)> on_connection) {
