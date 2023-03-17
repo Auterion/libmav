@@ -159,6 +159,7 @@ namespace mav {
                     if (connection_entry == _connections.end()) {
                         // we do not have a connection for this message, create one
                         auto connection = _addConnection(message.source());
+                        connection->consumeMessageFromNetwork(message);
                     } else {
                         connection_entry->second->consumeMessageFromNetwork(message);
                     }
@@ -186,6 +187,7 @@ namespace mav {
                 } catch (NetworkError &e) {
                     _should_terminate.store(true);
                     // Spread the network error to all connections
+                    std::lock_guard<std::mutex> lock(_connections_mutex);
                     for (auto& connection : _connections) {
                         connection.second->consumeNetworkExceptionFromNetwork(std::make_exception_ptr(e));
                     }
