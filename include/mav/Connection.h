@@ -47,8 +47,7 @@ namespace mav {
         ConnectionPartner _partner;
 
         // connection state
-        int _heartbeat_message_id;
-        uint64_t _last_heartbeat_ms = 0;
+        uint64_t _last_received_ms = 0;
 
         // callbacks
         std::function<void(Message &message)> _send_to_network_function;
@@ -67,8 +66,7 @@ namespace mav {
 
         Connection(const MessageSet &message_set, ConnectionPartner partner) :
         _message_set(message_set), _partner(partner) {
-            _heartbeat_message_id = _message_set.idForMessage("HEARTBEAT");
-            _last_heartbeat_ms = millis();
+            _last_received_ms = millis();
         }
 
         ConnectionPartner partner() const {
@@ -77,9 +75,8 @@ namespace mav {
 
         void consumeMessageFromNetwork(const Message& message) {
             // in case we received a heartbeat, update last heartbeat time, to keep the connection alive.
-            if (message.header().msgId() == _heartbeat_message_id) {
-                _last_heartbeat_ms = millis();
-            }
+            _last_received_ms = millis();
+
             {
                 std::scoped_lock<std::mutex> lock(_message_callback_mtx);
                 auto it = _message_callbacks.begin();
@@ -146,7 +143,7 @@ namespace mav {
         }
 
         bool alive() const {
-            return millis() - _last_heartbeat_ms < CONNECTION_TIMEOUT;
+            return millis() - _last_received_ms < CONNECTION_TIMEOUT;
         }
 
         template<typename T, typename E>
