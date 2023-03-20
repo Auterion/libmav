@@ -73,8 +73,6 @@ namespace mav {
                 std::fill(_backing_memory.begin() + _crc_offset,
                           _backing_memory.begin() + _backing_memory.size(), 0);
                 _crc_offset = -1;
-                // an un finalized message is always considered v2
-                _finalized_as_v1 = false;
             }
         }
 
@@ -388,13 +386,17 @@ namespace mav {
         }
 
         [[nodiscard]] uint32_t finalize(uint8_t seq, const Identifier &sender, bool finalize_as_v1 = false) {
+            if (finalize_as_v1 && !_finalized_as_v1) {
+                // clear header completely when switching protocols
+                std::fill(_backing_memory.begin(), _backing_memory.begin() + HEADER_SIZE, 0);
+            }
             if (isFinalized()) {
                 _unFinalize();
             }
             _finalized_as_v1 = finalize_as_v1;
 
             int payload_size = -1;
-            if (_finalized_as_v1) {
+            if (finalize_as_v1) {
                 // v1 does not do zero truncation
                 payload_size = _message_definition->maxPayloadSize();
             } else {
@@ -408,9 +410,9 @@ namespace mav {
                         - HEADER_SIZE, 1);
             }
 
-            header().magic() = _finalized_as_v1 ? 0xFE : 0xFD;
+            header().magic() = finalize_as_v1 ? 0xFE : 0xFD;
             header().len() = payload_size;
-            if (!_finalized_as_v1) {
+            if (!finalize_as_v1) {
                 header().incompatFlags() = 0;
                 header().compatFlags() = 0;
             }
@@ -424,7 +426,7 @@ namespace mav {
             header().msgId() = _message_definition->id();
 
             CRC crc;
-            crc.accumulate(_finalized_as_v1 ?
+            crc.accumulate(finalize_as_v1 ?
                 (_backing_memory.begin() + V1_HEADER_OFFSET + 1) : (_backing_memory.begin() + 1),
                            _backing_memory.begin() +
                 HEADER_SIZE + payload_size);
@@ -433,7 +435,7 @@ namespace mav {
             serialize(crc.crc16(), _backing_memory.data() + _crc_offset);
 
             int total_size = HEADER_SIZE + payload_size + CHECKSUM_SIZE;
-            if (_finalized_as_v1) {
+            if (finalize_as_v1) {
                 total_size -= V1_HEADER_OFFSET;
             }
             return total_size;
