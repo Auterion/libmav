@@ -41,6 +41,7 @@ namespace mav {
         virtual ConnectionPartner receive(uint8_t* destination, uint32_t size) = 0;
         virtual void markMessageBoundary() {};
         virtual void markSyncing() {};
+        virtual bool isConnectionOriented() const {};
     };
 
 
@@ -182,7 +183,19 @@ namespace mav {
                     std::lock_guard<std::mutex> lock(_connections_mutex);
                     std::lock_guard<std::mutex> heartbeat_message_lock(_heartbeat_message_mutex);
                         if (_heartbeat_message) {
-                            _sendMessage(_heartbeat_message.value(), {});
+                            if (_interface.isConnectionOriented()) {
+                                // For physical protocols that maintain in internal "connection" state, we can
+                                // send the heartbeat to all the partners even if there is no "mavlink" connection
+                                // established yet (e.g. they don't send us heartbeats).
+                                _sendMessage(_heartbeat_message.value(), {});
+                            } else {
+                                // For connectionless protocols, the only connection state we have is the mavlink
+                                // connection state. So we only send the heartbeat to the partners that have
+                                // sent us heartbeats before.
+                                for (auto& connection : _connections) {
+                                    _sendMessage(_heartbeat_message.value(), connection.first);
+                                }
+                            }
                         }
                 } catch (NetworkError &e) {
                     _should_terminate.store(true);
