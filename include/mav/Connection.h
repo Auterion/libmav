@@ -22,14 +22,15 @@ namespace mav {
 
 
     class Connection {
+    public:
+        using Expectation = std::shared_ptr<std::promise<Message>>;
+
     private:
 
         struct FunctionCallback {
             std::function<void(const Message &message)> callback;
             std::function<void(const std::exception_ptr& exception)> error_callback;
         };
-
-        using Expectation = std::shared_ptr<std::promise<Message>>;
 
         struct PromiseCallback {
             Expectation promise;
