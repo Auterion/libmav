@@ -101,6 +101,12 @@ namespace mav {
             _bytes_available = 0;
         }
 
+        bool isConnectionOriented() const override {
+            // even though UDP is not connection oriented, we can use it as if it was,
+            // since we're using the connect() function to bind to a specific remote address
+            return true;
+        }
+
         virtual ~UDPClient() {
             stop();
         }

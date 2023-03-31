@@ -42,7 +42,7 @@ namespace mav {
 
             if (bind(_socket, (struct sockaddr *) &server_address, sizeof(server_address)) < 0) {
                 ::close(_socket);
-                throw NetworkError("Could not bind to server");
+                throw NetworkError("Could not bind to socket. (Address already in use?)");
             }
         }
 
@@ -91,6 +91,10 @@ namespace mav {
         }
 
         void send(const uint8_t *data, uint32_t size, ConnectionPartner target) override {
+            if (target.isBroadcast()) {
+                throw NetworkError("Sending without target not supported for UDP server");
+            }
+
             struct sockaddr_in server_address{};
             server_address.sin_family = AF_INET;
             server_address.sin_port = target.port();
@@ -107,6 +111,11 @@ namespace mav {
             // therefore, we can discard the rest of the packet and just receive another datagram.
             _bytes_available = 0;
         }
+
+        bool isConnectionOriented() const override {
+            return false;
+        }
+
 
         virtual ~UDPServer() {
             stop();

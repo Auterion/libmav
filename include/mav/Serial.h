@@ -95,6 +95,10 @@ namespace mav {
             ::close(_fd);
         }
 
+        bool isConnectionOriented() const override {
+            return true;
+        }
+
         virtual ~Serial() {
             ::close(_fd);
         }

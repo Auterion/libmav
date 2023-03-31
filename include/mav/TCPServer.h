@@ -226,6 +226,11 @@ namespace mav {
             }
         }
 
+        bool isConnectionOriented() const override {
+            return true;
+        }
+
+
         void markMessageBoundary() override {
             // release the current socket, we can again accept data from any client socket
             _current_client_socket = -1;

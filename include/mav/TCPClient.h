@@ -86,6 +86,10 @@ namespace mav {
             }
         }
 
+        bool isConnectionOriented() const override {
+            return true;
+        }
+
         virtual ~TCPClient() {
             stop();
         }
