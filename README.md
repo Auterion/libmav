@@ -22,8 +22,8 @@ There are several ways to get it:
 
 Install globally on your system
 ```bash
-cmake .
-sudo make install
+cmake -Bbuild -S.
+sudo cmake --build build --target install
 ```
 Since the library is header only, you only need the library on the build system.
 
@@ -89,7 +89,7 @@ Libmav has classes for the following protocols:
 - UDP Server
 
 Libmav does not do any threading, except for the `NetworkRuntime` class.
-The `NetworkRuntime` class spawns a two threads. One two drive the receive
+The `NetworkRuntime` class spawns two threads. One to drive the receive
 loop and one to drive the HEARTBEAT transmission and timeout handling.
 
 ```C++
