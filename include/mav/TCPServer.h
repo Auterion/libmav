@@ -5,13 +5,14 @@
 #ifndef LIBMAVLINK_TCPSERVER_H
 #define LIBMAVLINK_TCPSERVER_H
 #include <sys/socket.h>
-#include <sys/epoll.h>
+#include <sys/poll.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <atomic>
 #include <unistd.h>
 #include <csignal>
 #include "Network.h"
+#include <sys/fcntl.h>
 
 namespace mav {
 
@@ -21,6 +22,7 @@ namespace mav {
         mutable std::atomic_bool _should_terminate{false};
         int _master_socket = -1;
         mutable std::mutex _client_sockets_mutex;
+        std::vector<struct pollfd> _poll_fds;
 
         int _current_client_socket = -1;
         ConnectionPartner _current_client;
@@ -29,20 +31,19 @@ namespace mav {
         std::unordered_map<ConnectionPartner, int, _ConnectionPartnerHash> _partner_to_fd;
 
 
-        int _epoll_fd = -1;
-
-        void _addFd(int fd, int events) const {
-            struct epoll_event epev = {};
-            epev.events = events;
-            epev.data.fd = fd;
-            if (epoll_ctl(_epoll_fd, EPOLL_CTL_ADD, fd, &epev) < 0) {
-                throw NetworkError("Could not add fd");
-            }
+        void _addFd(int fd, int16_t events) {
+            struct pollfd pfd = {};
+            pfd.fd = fd;
+            pfd.events = events;
+            _poll_fds.push_back(pfd);
         }
 
-        void _removeFd(int fd) const {
-            if (epoll_ctl(_epoll_fd, EPOLL_CTL_DEL, fd, nullptr) < 0) {
-                throw NetworkError("Could not remove fd");
+        void _removeFd(int fd) {
+            for (auto it = _poll_fds.begin(); it != _poll_fds.end(); ++it) {
+                if (it->fd == fd) {
+                    _poll_fds.erase(it);
+                    break;
+                }
             }
         }
 
@@ -61,7 +62,7 @@ namespace mav {
             ConnectionPartner partner = {address.sin_addr.s_addr, address.sin_port, false};
             _fd_to_partner.insert({client_socket, partner});
             _partner_to_fd.insert({partner, client_socket});
-            _addFd(client_socket, EPOLLIN);
+            _addFd(client_socket, POLLIN);
         }
 
         void _handleDisconnect(ConnectionPartner partner, int fd) {
@@ -75,16 +76,17 @@ namespace mav {
     public:
 
         TCPServer(int port) {
-
-            _epoll_fd = epoll_create1(EPOLL_CLOEXEC);
-            if (_epoll_fd < 0) {
-                throw NetworkError("Could not create epoll");
-            }
-
-            _master_socket = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0);
+            _master_socket = socket(AF_INET, SOCK_STREAM, 0);
             if (_master_socket < 0) {
-                throw NetworkError("Could not create socket");
+                throw NetworkError("Could not create socket: " + std::to_string(_master_socket));
             }
+
+            // Mark socket as non-blocking
+            if (fcntl(_master_socket, F_SETFL, O_NONBLOCK) < 0) {
+                ::close(_master_socket);
+                throw NetworkError("Could not set socket to non-blocking");
+            }
+
             const int enable = 1;
             if (setsockopt(_master_socket, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(int)) < 0) {
                 ::close(_master_socket);
@@ -104,7 +106,8 @@ namespace mav {
                 ::close(_master_socket);
                 throw NetworkError("Could not listen on socket");
             }
-            _addFd(_master_socket, EPOLLIN);
+
+            _addFd(_master_socket, POLLIN);
         }
 
         void stop() {
@@ -123,10 +126,6 @@ namespace mav {
             }
             _partner_to_fd.clear();
             _fd_to_partner.clear();
-            if (_epoll_fd >= 0) {
-                ::close(_epoll_fd);
-                _epoll_fd = -1;
-            }
         }
 
         void close() override {
@@ -144,50 +143,59 @@ namespace mav {
                 }
 
                 // check for activity on one of the sockets
-                struct epoll_event events[32];
-                auto n_activity = epoll_wait(_epoll_fd, events, 32, 1000);
-                if (n_activity < 0) {
+                auto poll_ret = poll(_poll_fds.data(), _poll_fds.size(), 1000);
+                if (poll_ret < 0) {
                     if (errno == EINTR) {
                         continue;
                     } else {
                         stop();
-                        throw NetworkError("epoll error");
+                        throw NetworkError("poll error");
                     }
-                }
+                } else if (poll_ret == 0) {
+                    continue;
+                } else {
+                    int socket_to_read_from = -1;
+                    ConnectionPartner partner_to_read_from;
 
-                int socket_to_read_from = -1;
-                ConnectionPartner partner_to_read_from;
-
-                // iterate through the activity
-                for (int i=0; i<n_activity; i++) {
-                    if (events[i].data.fd == _master_socket) {
-                        // this is a new connection
-                        _handleNewConnection();
-                    } else if (events[i].data.fd == _current_client_socket) {
-                        // this is the current connection
-                        socket_to_read_from = _current_client_socket;
-                        partner_to_read_from = _current_client;
-                        // ignore other activity. We want to read from this socket.
-                        break;
-                    } else {
-                        // this is a another connection
-                        socket_to_read_from = events[i].data.fd;
-                        partner_to_read_from = _fd_to_partner.at(socket_to_read_from);
+                    // iterate through the activity
+                    for (int i = 0; i < _poll_fds.size(); i++) {
+                        if (_poll_fds[i].revents == 0) {
+                            continue;
+                        }
+                        if (_poll_fds[i].revents != POLLIN) {
+                            // error on socket
+                            stop();
+                            throw NetworkError("Error on socket");
+                        }
+                        if (_poll_fds[i].fd == _master_socket) {
+                            // this is a new connection
+                            _handleNewConnection();
+                        } else if (_poll_fds[i].fd == _current_client_socket) {
+                            // this is the current connection
+                            socket_to_read_from = _current_client_socket;
+                            partner_to_read_from = _current_client;
+                            // ignore other activity. We want to read from this socket.
+                            break;
+                        } else {
+                            // this is a another connection
+                            socket_to_read_from = _poll_fds[i].fd;
+                            partner_to_read_from = _fd_to_partner.at(socket_to_read_from);
+                        }
                     }
-                }
 
-                // do the actual read
-                if (socket_to_read_from >= 0) {
-                    auto ret = read(socket_to_read_from, destination, size - bytes_received);
-                    if (ret <= 0) {
-                        // client disconnected
-                        _handleDisconnect(partner_to_read_from, socket_to_read_from);
-                        continue;
-                    } else {
-                        bytes_received += ret;
-                        destination += ret;
-                        _current_client_socket = socket_to_read_from;
-                        _current_client = partner_to_read_from;
+                    // do the actual read
+                    if (socket_to_read_from >= 0) {
+                        auto ret = read(socket_to_read_from, destination, size - bytes_received);
+                        if (ret <= 0) {
+                            // client disconnected
+                            _handleDisconnect(partner_to_read_from, socket_to_read_from);
+                            continue;
+                        } else {
+                            bytes_received += ret;
+                            destination += ret;
+                            _current_client_socket = socket_to_read_from;
+                            _current_client = partner_to_read_from;
+                        }
                     }
                 }
             }

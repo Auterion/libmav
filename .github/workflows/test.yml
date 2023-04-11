@@ -5,7 +5,11 @@ on:
 
 jobs:
   build-test:
-    runs-on: ubuntu-latest
+    strategy:
+        fail-fast: false
+        matrix:
+            platform: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v3
       - name: Build tests

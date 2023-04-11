@@ -12,6 +12,7 @@
 #include <vector>
 #include <array>
 #include <csignal>
+#include <unistd.h>
 #include "Network.h"
 
 namespace mav {

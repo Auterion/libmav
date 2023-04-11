@@ -41,7 +41,9 @@ namespace mav {
         virtual ConnectionPartner receive(uint8_t* destination, uint32_t size) = 0;
         virtual void markMessageBoundary() {};
         virtual void markSyncing() {};
-        virtual bool isConnectionOriented() const {};
+        virtual bool isConnectionOriented() const {
+            return false;
+        };
     };
 
 
