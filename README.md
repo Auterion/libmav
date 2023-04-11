@@ -1,4 +1,4 @@
-![build badge](https://github.com/ThomasDebrunner/libmav/actions/workflows/test.yml/badge.svg)
+![build badge](https://github.com/Auterion/libmav/actions/workflows/test.yml/badge.svg)
 
 # libmav
 
