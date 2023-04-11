@@ -1,5 +1,3 @@
-include(CTest)
-
 add_executable(tests
         test_main.cpp
         MessageSet.cpp
