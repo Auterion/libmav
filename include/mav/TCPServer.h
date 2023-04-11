@@ -12,6 +12,7 @@
 #include <unistd.h>
 #include <csignal>
 #include "Network.h"
+#include <sys/fcntl.h>
 
 namespace mav {
 
@@ -75,10 +76,17 @@ namespace mav {
     public:
 
         TCPServer(int port) {
-            _master_socket = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0);
+            _master_socket = socket(AF_INET, SOCK_STREAM, 0);
             if (_master_socket < 0) {
-                throw NetworkError("Could not create socket");
+                throw NetworkError("Could not create socket: " + std::to_string(_master_socket));
             }
+
+            // Mark socket as non-blocking
+            if (fcntl(_master_socket, F_SETFL, O_NONBLOCK) < 0) {
+                ::close(_master_socket);
+                throw NetworkError("Could not set socket to non-blocking");
+            }
+
             const int enable = 1;
             if (setsockopt(_master_socket, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(int)) < 0) {
                 ::close(_master_socket);
