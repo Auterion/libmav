@@ -41,11 +41,12 @@ namespace mav {
             }
         }
 
-        void stop() const {
+        void stop() {
             _should_terminate.store(true);
             if (_socket >= 0) {
                 ::shutdown(_socket, SHUT_RDWR);
                 ::close(_socket);
+                _socket = -1;
             }
         }
 

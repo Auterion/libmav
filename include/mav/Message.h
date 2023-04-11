@@ -383,6 +383,32 @@ namespace mav {
             }
         }
 
+        [[nodiscard]] std::string toString() const {
+            std::stringstream  ss;
+            ss << "Message ID " << id() << " (" << name() << ") \n";
+            for (const auto &field_key : _message_definition->fieldNames()) {
+                ss << "  " << field_key << ": ";
+                std::visit([&ss](auto&& arg) {
+                    if constexpr (is_string<decltype(arg)>::value) {
+                        ss << "\"" << arg << "\"";
+                    } else if constexpr (is_any<std::decay_t<decltype(arg)>, uint8_t, int8_t>::value) {
+                        // static cast to int to avoid printing as a char
+                        ss << static_cast<int>(arg);
+                    } else if constexpr (is_iterable<decltype(arg)>::value) {
+                        for (auto it = arg.begin(); it != arg.end(); it++) {
+                            if (it != arg.begin())
+                                ss << ", ";
+                            ss << *it;
+                        }
+                    } else {
+                        ss << arg;
+                    }
+                }, getAsNativeTypeInVariant(field_key));
+                ss << "\n";
+            }
+            return ss.str();
+        }
+
         [[nodiscard]] uint32_t finalize(uint8_t seq, const Identifier &sender) {
             if (isFinalized()) {
                 _unFinalize();
