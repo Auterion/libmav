@@ -46,5 +46,8 @@ install(DIRECTORY ${PROJECT_SOURCE_DIR}/include/mav DESTINATION include)
 set(CPACK_RESOURCE_FILE_LICENSE "${PROJECT_SOURCE_DIR}/LICENSE")
 
 include(CPack)
+include(CTest)
 
-add_subdirectory(tests)
+if(BUILD_TESTING)
+    add_subdirectory(tests)
+endif()
