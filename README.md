@@ -13,7 +13,7 @@ networks and several of the mavlink internal protocols.
 There are many mavlink libraries out there. The main advantages of this library over others are:
 
 - **Runtime defined message set**. No need to recompile on message set change
-- **Native python bindings** for C++ code. Faster than pure python. *Coming soon*
+- [**Native python bindings**](https://github.com/Auterion/libmav-python) for C++ code. Faster than pure python.
 - **Header-only, no dependencies**, C++ 17, >90% test coverage
 
 ## How to install
@@ -84,7 +84,7 @@ message.set({
 Libmav has classes for the following protocols:
 - Serial
 - TCP Client
-- TCP Server *Coming soon*
+- TCP Server
 - UDP Client
 - UDP Server
 
