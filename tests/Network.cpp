@@ -74,6 +74,7 @@ public:
     void reset() {
         flushSendSponge();
         flushReceiveQueue();
+        should_fail.store(false);
     }
 
     void addToReceiveQueue(const std::string &data, const ConnectionPartner &partner) {
@@ -184,5 +185,19 @@ TEST_CASE("Create network runtime") {
         auto expectation = connection->expect("TEST_MESSAGE");
         interface.makeFailOnNextReceive();
         CHECK_THROWS_AS(auto message = connection->receive(expectation), NetworkError);
+    }
+
+    SUBCASE("Connection recycled on recover after fail") {
+        interface.reset();
+        auto expectation = connection->expect("HEARTBEAT");
+        interface.makeFailOnNextReceive();
+        CHECK_THROWS_AS(auto message = connection->receive(expectation), NetworkError);
+        CHECK_FALSE(connection->alive());
+        interface.reset();
+        expectation = connection->expect("HEARTBEAT");
+        interface.addToReceiveQueue("\xfd\x09\x00\x00\x00\xfd\x01\x00\x00\x00\x04\x00\x00\x00\x01\x02\x03\x05\x06\x77\x53"s, interface_partner);
+        auto message = connection->receive(expectation);
+        CHECK_EQ(message.name(), "HEARTBEAT");
+        CHECK(connection->alive());
     }
 }

@@ -131,5 +131,136 @@ TEST_CASE("UDP server client") {
         }
 
     }
+
+    SUBCASE("Connection is recycled when client disconnects but connection object stays referenced") {
+        // setup server
+        mav::UDPServer server_physical(19334);
+        mav::NetworkRuntime server_runtime(message_set, server_physical);
+
+        std::promise<void> connection_called_promise;
+        auto connection_called_future = connection_called_promise.get_future();
+        server_runtime.onConnection([&connection_called_promise](const std::shared_ptr<mav::Connection> &connection) {
+            connection_called_promise.set_value();
+        });
+
+        // setup client
+        auto heartbeat = message_set.create("HEARTBEAT")({
+                                                                 {"type",            1},
+                                                                 {"autopilot",       2},
+                                                                 {"base_mode",       3},
+                                                                 {"custom_mode",     4},
+                                                                 {"system_status",   5},
+                                                                 {"mavlink_version", 6}});
+        mav::UDPClient client_physical("127.0.0.1", 19334);
+        mav::NetworkRuntime client_runtime(message_set, heartbeat, client_physical);
+
+        CHECK((connection_called_future.wait_for(std::chrono::seconds(2)) != std::future_status::timeout));
+
+        auto server_connection = server_runtime.awaitConnection(100);
+        server_connection->send(heartbeat);
+        auto client_connection = client_runtime.awaitConnection(100);
+
+        std::promise<void> connection_dropped_promise;
+        auto connection_dropped_future = connection_dropped_promise.get_future();
+        client_runtime.onConnectionLost([&connection_dropped_promise](const std::shared_ptr<mav::Connection> &connection) {
+            connection_dropped_promise.set_value();
+        });
+
+        // kill server
+        server_physical.stop();
+        server_runtime.stop();
+
+        // make the client connection drop
+        std::this_thread::sleep_for(std::chrono::seconds(5));
+        CHECK_FALSE(client_connection->alive());
+
+        // make sure the connection dropped callback is called
+        CHECK((connection_dropped_future.wait_for(std::chrono::seconds(2)) != std::future_status::timeout));
+        client_runtime.onConnectionLost(nullptr);
+
+        // setup new server
+        mav::UDPServer server_physical2(19334);
+        mav::NetworkRuntime server_runtime2(message_set, server_physical2);
+
+        auto server2_connection = server_runtime2.awaitConnection(100);
+        server2_connection->send(heartbeat);
+
+        auto client_connection2 = client_runtime.awaitConnection(100);
+        CHECK_EQ(client_connection, client_connection2);
+
+        // can still use expectation created on client_connection to receive on client_connection2, as they are the same
+        CHECK(client_connection->alive());
+    }
+
+    SUBCASE("Connection is not recycled when client disconnects and reference drops") {
+        // setup server
+        mav::UDPServer server_physical(19334);
+        mav::NetworkRuntime server_runtime(message_set, server_physical);
+
+        std::promise<void> connection_called_promise;
+        auto connection_called_future = connection_called_promise.get_future();
+        server_runtime.onConnection([&connection_called_promise](const std::shared_ptr<mav::Connection> &connection) {
+            connection_called_promise.set_value();
+        });
+
+        // setup client
+        auto heartbeat = message_set.create("HEARTBEAT")({
+                                                                 {"type",            1},
+                                                                 {"autopilot",       2},
+                                                                 {"base_mode",       3},
+                                                                 {"custom_mode",     4},
+                                                                 {"system_status",   5},
+                                                                 {"mavlink_version", 6}});
+
+        mav::UDPClient client_physical("127.0.0.1", 19334);
+        mav::NetworkRuntime client_runtime(message_set, heartbeat, client_physical);
+
+        CHECK((connection_called_future.wait_for(std::chrono::seconds(2)) != std::future_status::timeout));
+
+        auto server_connection = server_runtime.awaitConnection(100);
+        server_connection->send(heartbeat);
+
+        std::weak_ptr<Connection> old_connection;
+        mav::Connection::Expectation expectation;
+        {
+            auto client_connection = client_runtime.awaitConnection(100);
+            expectation = client_connection->expect("BIG_MESSAGE");
+
+            std::promise<void> connection_dropped_promise;
+            auto connection_dropped_future = connection_dropped_promise.get_future();
+            client_runtime.onConnectionLost([&connection_dropped_promise](const std::shared_ptr<mav::Connection> &connection) {
+                connection_dropped_promise.set_value();
+            });
+
+            // kill server
+            server_physical.stop();
+            server_runtime.stop();
+
+            // make the client connection drop
+            std::this_thread::sleep_for(std::chrono::seconds(5));
+            CHECK_FALSE(client_connection->alive());
+
+            // make sure the connection dropped callback is called
+            CHECK((connection_dropped_future.wait_for(std::chrono::seconds(2)) != std::future_status::timeout));
+            client_runtime.onConnectionLost(nullptr);
+
+            old_connection = std::weak_ptr<Connection>(client_connection);
+            // client connection drops out of scope here. Should not be recycled.
+        }
+
+
+        // setup new server
+        mav::UDPServer server_physical2(19334);
+        mav::NetworkRuntime server_runtime2(message_set, server_physical2);
+
+        auto server2_connection = server_runtime2.awaitConnection(100);
+        server2_connection->send(heartbeat);
+
+        auto client_connection2 = client_runtime.awaitConnection(100);
+
+        CHECK_NE(old_connection.lock(), client_connection2);
+
+        CHECK(client_connection2->alive());
+    }
 }
 

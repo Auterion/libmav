@@ -78,6 +78,7 @@ namespace mav {
 
         // connection state
         uint64_t _last_received_ms = 0;
+        bool _underlying_network_fault = false;
 
         // callbacks
         std::function<void(Message &message)> _send_to_network_function;
@@ -107,6 +108,8 @@ namespace mav {
             // in case we received a heartbeat, update last heartbeat time, to keep the connection alive.
             _last_received_ms = millis();
 
+            // if we received a message, we can assume that the connection is working again.
+            _underlying_network_fault = false;
             {
                 std::scoped_lock<std::mutex> lock(_message_callback_mtx);
                 auto it = _message_callbacks.begin();
@@ -135,6 +138,7 @@ namespace mav {
         }
 
         void consumeNetworkExceptionFromNetwork(const std::exception_ptr& exception) {
+            _underlying_network_fault = true;
             std::scoped_lock<std::mutex> lock(_message_callback_mtx);
             auto it = _message_callbacks.begin();
             while (it != _message_callbacks.end()) {
@@ -173,7 +177,7 @@ namespace mav {
         }
 
         bool alive() const {
-            return millis() - _last_received_ms < CONNECTION_TIMEOUT;
+            return !_underlying_network_fault && (millis() - _last_received_ms < CONNECTION_TIMEOUT);
         }
 
         template<typename T, typename E>
