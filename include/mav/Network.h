@@ -318,12 +318,12 @@ namespace mav {
         }
 
         void setHeartbeatMessage(const Message &message) {
-            std::unique_lock<std::mutex> lock(_send_mutex);
+            std::lock_guard heartbeat_message_lock(_heartbeat_message_mutex);
             _heartbeat_message = message;
         }
 
         void clearHeartbeat() {
-            std::unique_lock<std::mutex> lock(_send_mutex);
+            std::lock_guard heartbeat_message_lock(_heartbeat_message_mutex);
             _heartbeat_message = std::nullopt;
         }
 
