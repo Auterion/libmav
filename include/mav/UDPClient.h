@@ -88,6 +88,7 @@ namespace mav {
             if (_socket >= 0) {
                 ::shutdown(_socket, SHUT_RDWR);
                 ::close(_socket);
+                _socket = -1;
             }
         }
 
@@ -122,6 +123,7 @@ namespace mav {
             // no need to specify target here, as we called the udp connect function in constructor
             if (sendto(_socket, data, size, 0, (struct sockaddr *) nullptr, 0) < 0) {
                 ::close(_socket);
+                _socket = -1;
                 throw NetworkError("Could not send to socket");
             }
         }
