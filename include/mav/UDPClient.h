@@ -64,7 +64,7 @@ namespace mav {
         UDPClient(const std::string &remote_address, int remote_port) {
             _socket = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
             if (_socket < 0) {
-                throw NetworkError("Could not create socket");
+                throw NetworkError("Could not create socket", errno);
             }
 
             _server_address.sin_family = AF_INET;
@@ -73,7 +73,7 @@ namespace mav {
 
             // connect to server
             if(connect(_socket, (struct sockaddr *)&_server_address, sizeof(_server_address)) < 0) {
-                throw NetworkError("UDP connect call failed");
+                throw NetworkError("UDP connect call failed", errno);
             }
 
             _partner = {
@@ -104,7 +104,7 @@ namespace mav {
                 ssize_t ret = ::recvfrom(_socket, _rx_buffer.data(), RX_BUFFER_SIZE, 0,
                                          (struct sockaddr *) nullptr, nullptr);
                 if (ret < 0) {
-                    throw NetworkError("Could not receive from socket");
+                    throw NetworkError("Could not receive from socket", errno);
                 }
                 _bytes_available += static_cast<int>(ret);
             }
@@ -124,7 +124,7 @@ namespace mav {
             if (sendto(_socket, data, size, 0, (struct sockaddr *) nullptr, 0) < 0) {
                 ::close(_socket);
                 _socket = -1;
-                throw NetworkError("Could not send to socket");
+                throw NetworkError("Could not send to socket", errno);
             }
         }
 

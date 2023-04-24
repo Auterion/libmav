@@ -35,6 +35,7 @@
 #ifndef MAV_NETWORK_H
 #define MAV_NETWORK_H
 
+#include <cstring>
 #include <list>
 #include <thread>
 #include <array>
@@ -52,8 +53,16 @@ namespace mav {
 
     class NetworkError : public std::runtime_error {
     public:
-        explicit NetworkError(const char* message) : std::runtime_error(message) {}
+        explicit NetworkError(const char* message, int errno_num = 0)
+                : std::runtime_error(
+                std::string(message) + (errno_num != 0 ? (std::string(" (") + strerror(errno_num) + ")") : "")),
+                  _errno_num(errno_num)
+        {}
         explicit NetworkError(const std::string& message) : std::runtime_error(message) {}
+
+        [[nodiscard]] int errnoNum() const { return _errno_num; }
+    private:
+        int _errno_num{-1};
     };
 
     class NetworkClosed : public NetworkError {
