@@ -206,7 +206,14 @@ namespace mav {
                         connection_entry->second->consumeMessageFromNetwork(message);
                     }
                 } catch (NetworkError &e) {
-                    _should_terminate.store(true);
+                    // A connection might be refused initially if the other side is not up yet (e.g. UDP client). Continue
+                    // and let the upper layers handle any timeouts. If it happens later on we still forward the error.
+                    if (e.errnoNum() == ECONNREFUSED) {
+                        // Wait a bit to ensure there's no busy loop
+                        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+                    } else {
+                        _should_terminate.store(true);
+                    }
                     // Spread the network error to all connections
                     std::lock_guard<std::mutex> lock(_connections_mutex);
                     for (auto& connection : _connections) {
