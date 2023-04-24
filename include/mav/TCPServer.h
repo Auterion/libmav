@@ -84,7 +84,7 @@ namespace mav {
                                         &client_address_length);
             if (client_socket < 0) {
                 ::close(_master_socket);
-                throw NetworkError("Could not accept connection");
+                throw NetworkError("Could not accept connection", errno);
             }
             struct sockaddr_in address{};
             int addrlen = sizeof(address);
@@ -114,13 +114,13 @@ namespace mav {
             // Mark socket as non-blocking
             if (fcntl(_master_socket, F_SETFL, O_NONBLOCK) < 0) {
                 ::close(_master_socket);
-                throw NetworkError("Could not set socket to non-blocking");
+                throw NetworkError("Could not set socket to non-blocking", errno);
             }
 
             const int enable = 1;
             if (setsockopt(_master_socket, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(int)) < 0) {
                 ::close(_master_socket);
-                throw NetworkError("Could not set socket options");
+                throw NetworkError("Could not set socket options", errno);
             }
             struct sockaddr_in server_address{};
             server_address.sin_family = AF_INET;
@@ -129,12 +129,12 @@ namespace mav {
 
             if (bind(_master_socket, (struct sockaddr *) &server_address, sizeof(server_address)) < 0) {
                 ::close(_master_socket);
-                throw NetworkError("Could not bind socket");
+                throw NetworkError("Could not bind socket", errno);
             }
 
             if (listen(_master_socket, 32) < 0) {
                 ::close(_master_socket);
-                throw NetworkError("Could not listen on socket");
+                throw NetworkError("Could not listen on socket", errno);
             }
 
             _addFd(_master_socket, POLLIN);
@@ -179,7 +179,7 @@ namespace mav {
                         continue;
                     } else {
                         stop();
-                        throw NetworkError("poll error");
+                        throw NetworkError("poll error", errno);
                     }
                 } else if (poll_ret == 0) {
                     continue;
@@ -238,7 +238,7 @@ namespace mav {
             while (sent < size && !_should_terminate.load()) {
                 auto ret = write(partner_socket, data, size - sent);
                 if (ret < 0) {
-                    throw NetworkError("Could not write to socket");
+                    throw NetworkError("Could not write to socket", errno);
                 }
                 sent += ret;
             }

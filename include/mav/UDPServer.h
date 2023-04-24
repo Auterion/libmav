@@ -63,7 +63,7 @@ namespace mav {
         UDPServer(int local_port, const std::string& local_address="0.0.0.0") {
             _socket = socket(AF_INET, SOCK_DGRAM, 0);
             if (_socket < 0) {
-                throw NetworkError("Could not create socket");
+                throw NetworkError("Could not create socket", errno);
             }
             struct sockaddr_in server_address{};
             server_address.sin_family = AF_INET;
@@ -72,7 +72,7 @@ namespace mav {
 
             if (bind(_socket, (struct sockaddr *) &server_address, sizeof(server_address)) < 0) {
                 ::close(_socket);
-                throw NetworkError("Could not bind to socket. (Address already in use?)");
+                throw NetworkError("Could not bind to socket", errno);
             }
         }
 
@@ -98,7 +98,7 @@ namespace mav {
                 ssize_t ret = ::recvfrom(_socket, _rx_buffer.data(), RX_BUFFER_SIZE, 0,
                                      (struct sockaddr*)&source_address, &source_address_length);
                 if (ret < 0) {
-                    throw NetworkError("Could not receive from socket");
+                    throw NetworkError("Could not receive from socket", errno);
                 }
                 _bytes_available += static_cast<int>(ret);
 
@@ -132,7 +132,7 @@ namespace mav {
 
             if (sendto(_socket, data, size, 0, (struct sockaddr *) &server_address, sizeof(server_address)) < 0) {
                 ::close(_socket);
-                throw NetworkError("Could not send to socket");
+                throw NetworkError("Could not send to socket", errno);
             }
         }
 

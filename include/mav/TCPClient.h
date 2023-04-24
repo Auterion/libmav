@@ -57,7 +57,7 @@ namespace mav {
         TCPClient(const std::string& address, int port) {
             _socket = socket(AF_INET, SOCK_STREAM, 0);
             if (_socket < 0) {
-                throw NetworkError("Could not create socket");
+                throw NetworkError("Could not create socket", errno);
             }
             struct sockaddr_in server_address{};
             server_address.sin_family = AF_INET;
@@ -68,7 +68,7 @@ namespace mav {
 
             if (connect(_socket, (struct sockaddr *) &server_address, sizeof(server_address)) < 0) {
                 ::close(_socket);
-                throw NetworkError("Could not connect to server");
+                throw NetworkError("Could not connect to server", errno);
             }
         }
 
@@ -91,7 +91,7 @@ namespace mav {
                 auto ret = read(_socket, destination, size - received);
                 if (ret < 0) {
                     ::close(_socket);
-                    throw NetworkError("Could not read from socket");
+                    throw NetworkError("Could not read from socket", errno);
                 }
                 received += ret;
             }
@@ -108,7 +108,7 @@ namespace mav {
                 auto ret = write(_socket, data, size - sent);
                 if (ret < 0) {
                     ::close(_socket);
-                    throw NetworkError("Could not write to socket");
+                    throw NetworkError("Could not write to socket", errno);
                 }
                 sent += ret;
             }
