@@ -54,11 +54,19 @@ namespace mav {
 
     public:
 
-        TCPClient(const std::string& address, int port) {
+        TCPClient(const std::string& address, int port, int timeout = -1) {
             _socket = socket(AF_INET, SOCK_STREAM, 0);
             if (_socket < 0) {
                 throw NetworkError("Could not create socket", errno);
             }
+
+            if (timeout > 0) {
+                struct timeval send_timeout;
+                send_timeout.tv_sec = 0;
+                send_timeout.tv_usec = timeout;
+                setsockopt(_socket, SOL_SOCKET, SO_SNDTIMEO, &send_timeout, sizeof(send_timeout));
+            }
+
             struct sockaddr_in server_address{};
             server_address.sin_family = AF_INET;
             server_address.sin_port = htons(port);
