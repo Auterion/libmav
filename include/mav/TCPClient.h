@@ -41,6 +41,7 @@
 #include <atomic>
 #include <unistd.h>
 #include <csignal>
+#include <netdb.h>
 #include "Network.h"
 
 namespace mav {
@@ -59,10 +60,18 @@ namespace mav {
             if (_socket < 0) {
                 throw NetworkError("Could not create socket", errno);
             }
+
+            struct hostent *hp;
+            hp = gethostbyname(address.c_str());
+            if (hp == nullptr) {
+                ::close(_socket);
+                throw NetworkError("Could not resolve host");
+            }
+
             struct sockaddr_in server_address{};
             server_address.sin_family = AF_INET;
             server_address.sin_port = htons(port);
-            server_address.sin_addr.s_addr = inet_addr(address.c_str());
+            std::copy(hp->h_addr, hp->h_addr + hp->h_length, (char*)&(server_address.sin_addr.s_addr));
 
             _partner = {server_address.sin_addr.s_addr, server_address.sin_port, false};
 
