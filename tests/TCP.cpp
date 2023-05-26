@@ -61,7 +61,7 @@ TEST_CASE("TCP server client") {
                                                                  {"system_status", 5},
                                                                  {"mavlink_version", 6}});
 
-        mav::TCPClient client_physical("127.0.0.1", PORT);
+        mav::TCPClient client_physical("localhost", PORT);
         mav::NetworkRuntime client_runtime(message_set, heartbeat, client_physical);
 
         CHECK((connection_called_future.wait_for(std::chrono::seconds(2)) != std::future_status::timeout));
