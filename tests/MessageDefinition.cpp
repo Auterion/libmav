@@ -71,7 +71,7 @@ TEST_CASE("Message set methods") {
     }
 
     SUBCASE("Get non existing field") {
-        CHECK_THROWS_AS(definition.fieldForName("non_existing_field"), std::out_of_range);
+        CHECK_THROWS_AS((void)definition.fieldForName("non_existing_field"), std::out_of_range);
     }
 
     SUBCASE("Contains fields") {
