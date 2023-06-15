@@ -195,7 +195,8 @@ auto response = connection.receive(expecation, 1000);
 
 #### Receive using a callback
 
-Alternatively, you can also register regular callbacks
+Alternatively, you can also register regular callbacks.
+Note however that this will consume all messages, effectively disabling the synchronous APIs. 
 
 ```C++
 // adding a callback
