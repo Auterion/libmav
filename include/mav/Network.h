@@ -163,6 +163,8 @@ namespace mav {
         std::unique_ptr<std::promise<std::shared_ptr<Connection>>> _first_connection_promise = nullptr;
         uint8_t _seq = 0;
 
+        std::mutex _on_connection_mutex;
+        std::mutex _on_connection_lost_mutex;
         std::function<void(const std::shared_ptr<Connection>&)> _on_connection;
         std::function<void(const std::shared_ptr<Connection>&)> _on_connection_lost;
 
@@ -179,8 +181,11 @@ namespace mav {
             });
 
             _connections.insert({partner, new_connection});
-            if (_on_connection) {
-                _on_connection(new_connection);
+            {
+                std::lock_guard<std::mutex> lock(_on_connection_mutex);
+                if (_on_connection) {
+                    _on_connection(new_connection);
+                }
             }
 
             if (_first_connection_promise) {
@@ -262,8 +267,11 @@ namespace mav {
                     for (auto it = _connections.begin(); it != _connections.end();) {
 
                         if (!it->second->alive()) {
-                            if (_on_connection_lost) {
-                                _on_connection_lost(it->second);
+                            {
+                                std::lock_guard<std::mutex> lock(_on_connection_lost_mutex);
+                                if (_on_connection_lost) {
+                                    _on_connection_lost(it->second);
+                                }
                             }
                             it = _connections.erase(it);
                         } else {
@@ -309,10 +317,12 @@ namespace mav {
 
 
         void onConnection(std::function<void(const std::shared_ptr<Connection>&)> on_connection) {
+            std::lock_guard<std::mutex> lock(_on_connection_mutex);
             _on_connection = std::move(on_connection);
         }
 
         void onConnectionLost(std::function<void(const std::shared_ptr<Connection>&)> on_connection_lost) {
+            std::lock_guard<std::mutex> lock(_on_connection_lost_mutex);
             _on_connection_lost = std::move(on_connection_lost);
         }
 
@@ -322,8 +332,9 @@ namespace mav {
                 if (!_connections.empty()) {
                     return _connections.begin()->second;
                 }
+                _first_connection_promise = std::make_unique<std::promise<std::shared_ptr<Connection>>>();
             }
-            _first_connection_promise = std::make_unique<std::promise<std::shared_ptr<Connection>>>();
+            
             auto fut = _first_connection_promise->get_future();
             if (timeout_ms >= 0) {
                 if (fut.wait_for(std::chrono::milliseconds(timeout_ms)) == std::future_status::timeout) {
