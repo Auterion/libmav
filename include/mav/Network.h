@@ -286,9 +286,12 @@ namespace mav {
 
 
     public:
-        NetworkRuntime(const Identifier &own_id, const MessageSet &message_set, NetworkInterface &interface) :
+        NetworkRuntime(const Identifier &own_id, const MessageSet &message_set, NetworkInterface &interface,
+                       std::function<void(const std::shared_ptr<Connection>&)> on_connection = {},
+                       std::function<void(const std::shared_ptr<Connection>&)> on_connection_lost = {}) :
                 _own_id(own_id), _message_set(message_set),
-                _interface(interface), _parser(_message_set, _interface) {
+                _interface(interface), _parser(_message_set, _interface),
+                _on_connection(std::move(on_connection)), _on_connection_lost(std::move(on_connection_lost)) {
 
             _receive_thread = std::thread{
                 [this]() {
@@ -303,17 +306,24 @@ namespace mav {
             };
         }
 
-        NetworkRuntime(const MessageSet &message_set, NetworkInterface &interface) :
+        NetworkRuntime(const MessageSet &message_set, NetworkInterface &interface,
+                       std::function<void(const std::shared_ptr<Connection>&)> on_connection = {},
+                       std::function<void(const std::shared_ptr<Connection>&)> on_connection_lost = {}) :
                 NetworkRuntime({LIBMAV_DEFAULT_ID, LIBMAV_DEFAULT_ID},
-                               message_set, interface) {}
+                               message_set, interface, on_connection, on_connection_lost) {}
 
-        NetworkRuntime(const Identifier &own_id, const MessageSet &message_set, const Message &heartbeat_message, NetworkInterface &interface) :
-                NetworkRuntime(own_id, message_set, interface) {
+        NetworkRuntime(const Identifier &own_id, const MessageSet &message_set, const Message &heartbeat_message, NetworkInterface &interface,
+                       std::function<void(const std::shared_ptr<Connection>&)> on_connection = {},
+                       std::function<void(const std::shared_ptr<Connection>&)> on_connection_lost = {}) :
+                NetworkRuntime(own_id, message_set, interface, on_connection, on_connection_lost) {
             setHeartbeatMessage(heartbeat_message);
         }
 
-        NetworkRuntime(const MessageSet &message_set, const Message &heartbeat_message, NetworkInterface &interface) :
-                NetworkRuntime({LIBMAV_DEFAULT_ID, LIBMAV_DEFAULT_ID}, message_set, heartbeat_message, interface) {}
+        NetworkRuntime(const MessageSet &message_set, const Message &heartbeat_message, NetworkInterface &interface,
+                       std::function<void(const std::shared_ptr<Connection>&)> on_connection = {},
+                       std::function<void(const std::shared_ptr<Connection>&)> on_connection_lost = {}) :
+                NetworkRuntime({LIBMAV_DEFAULT_ID, LIBMAV_DEFAULT_ID},
+                                message_set, heartbeat_message, interface, on_connection, on_connection_lost) {}
 
 
         void onConnection(std::function<void(const std::shared_ptr<Connection>&)> on_connection) {
