@@ -102,6 +102,7 @@ namespace mav {
                     ::close(_socket);
                     throw NetworkError("Could not read from socket", errno);
                 }
+                destination += ret;
                 received += ret;
             }
             if (_should_terminate.load()) {
@@ -119,6 +120,7 @@ namespace mav {
                     ::close(_socket);
                     throw NetworkError("Could not write to socket", errno);
                 }
+                data += ret;
                 sent += ret;
             }
             if (_should_terminate.load()) {
