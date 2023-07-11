@@ -104,12 +104,16 @@ TEST_CASE("Create network runtime") {
                     <field type="uint8_t" name="system_status">System status flag, see MAV_STATE ENUM</field>
                     <field type="uint8_t" name="mavlink_version">MAVLink version, not writable by user, gets added by protocol because of magic data type: uint8_t_mavlink_version</field>
                 </message>
+                <message id="9916" name="TEST_MESSAGE">
+                    <field type="int32_t" name="value">description</field>
+                    <field type="char[20]" name="text">description</field>
+                </message>
             </messages>
         </mavlink>
     )");
 
     REQUIRE(message_set.contains("HEARTBEAT"));
-    REQUIRE_EQ(message_set.size(), 1);
+    REQUIRE_EQ(message_set.size(), 2);
 
     ConnectionPartner interface_partner = {0x0a290101, 14550, false};
     ConnectionPartner interface_wrong_partner = {0x0a290103, 14550, false};
@@ -117,60 +121,54 @@ TEST_CASE("Create network runtime") {
     DummyInterface interface;
     NetworkRuntime network({253, 1}, message_set, interface);
 
+    // send a heartbeat message, to establish a connection
     interface.addToReceiveQueue("\xfd\x09\x00\x00\x00\xfd\x01\x00\x00\x00\x04\x00\x00\x00\x01\x02\x03\x05\x06\x77\x53"s, interface_partner);
     auto connection = network.awaitConnection();
 
 
     SUBCASE("Can send message") {
         interface.reset();
-        auto message = message_set.create("HEARTBEAT")({
-            {"type", 1},
-            {"autopilot", 2},
-            {"base_mode", 3},
-            {"custom_mode", 4},
-            {"system_status", 5},
-            {"mavlink_version", 6}});
+        auto message = message_set.create("TEST_MESSAGE")({
+          {"value", 42},
+          {"text", "Hello World!"}
+        });
         connection->send(message);
         bool found = (interface.sendSpongeContains(
-                "\xfd\x09\x00\x00\x00\xfd\x01\x00\x00\x00\x04\x00\x00\x00\x01\x02\x03\x05\x06\x77\x53"s, interface_partner));
+                "\xfd\x10\x00\x00\x00\xfd\x01\xbc\x26\x00\x2a\x00\x00\x00\x48\x65\x6c\x6c\x6f\x20\x57\x6f\x72\x6c\x64\x21\x86\x37"s, interface_partner));
         CHECK(found);
     }
 
     SUBCASE("Can receive message") {
         interface.reset();
-        auto expectation = connection->expect("HEARTBEAT");
-        interface.addToReceiveQueue("\xfd\x09\x00\x00\x00\x01\x01\x00\x00\x00\x04\x00\x00\x00\x01\x02\x03\x05\x06\x46\x61"s, interface_partner);
+        auto expectation = connection->expect("TEST_MESSAGE");
+        interface.addToReceiveQueue("\xfd\x10\x00\x00\x01\x61\x61\xbc\x26\x00\x2a\x00\x00\x00\x48\x65\x6c\x6c\x6f\x20\x57\x6f\x72\x6c\x64\x21\x53\xd9"s, interface_partner);
         auto message = connection->receive(expectation);
-        CHECK_EQ(message.name(), "HEARTBEAT");
-        CHECK_EQ(message.get<int>("type"), 1);
-        CHECK_EQ(message.get<int>("autopilot"), 2);
-        CHECK_EQ(message.get<int>("base_mode"), 3);
-        CHECK_EQ(message.get<int>("custom_mode"), 4);
-        CHECK_EQ(message.get<int>("system_status"), 5);
-        CHECK_EQ(message.get<int>("mavlink_version"), 6);
+        CHECK_EQ(message.name(), "TEST_MESSAGE");
+        CHECK_EQ(message.get<int>("value"), 42);
+        CHECK_EQ(message.get<std::string>("text"), "Hello World!");
     }
 
 
     SUBCASE("Message sent twice before receive") {
         interface.reset();
-        auto expectation = connection->expect("HEARTBEAT");
-        interface.addToReceiveQueue("\xfd\x09\x00\x00\x00\x01\x01\x00\x00\x00\x04\x00\x00\x00\x01\x02\x03\x05\x06\x46\x61"s, interface_partner);
-        interface.addToReceiveQueue("\xfd\x09\x00\x00\x00\x01\x01\x00\x00\x00\x04\x00\x00\x00\x01\x02\x03\x05\x06\x46\x61"s, interface_partner);
+        auto expectation = connection->expect("TEST_MESSAGE");
+        interface.addToReceiveQueue("\xfd\x10\x00\x00\x01\x61\x61\xbc\x26\x00\x2a\x00\x00\x00\x48\x65\x6c\x6c\x6f\x20\x57\x6f\x72\x6c\x64\x21\x53\xd9"s, interface_partner);
+        interface.addToReceiveQueue("\xfd\x10\x00\x00\x01\x61\x61\xbc\x26\x00\x2a\x00\x00\x00\x48\x65\x6c\x6c\x6f\x20\x57\x6f\x72\x6c\x64\x21\x53\xd9"s, interface_partner);
         auto message = connection->receive(expectation);
-        CHECK_EQ(message.name(), "HEARTBEAT");
+        CHECK_EQ(message.name(), "TEST_MESSAGE");
     }
 
     SUBCASE("Can not receive message from wrong partner") {
         interface.reset();
-        auto expectation = connection->expect("HEARTBEAT");
-        interface.addToReceiveQueue("\xfd\x09\x00\x00\x00\xfd\x01\x00\x00\x00\x04\x00\x00\x00\x01\x02\x03\x05\x06\x77\x53"s, interface_wrong_partner);
+        auto expectation = connection->expect("TEST_MESSAGE");
+        interface.addToReceiveQueue("\xfd\x10\x00\x00\x01\x61\x61\xbc\x26\x00\x2a\x00\x00\x00\x48\x65\x6c\x6c\x6f\x20\x57\x6f\x72\x6c\x64\x21\x53\xd9"s, interface_wrong_partner);
         CHECK_THROWS_AS(auto message = connection->receive(expectation, 100), TimeoutException);
     }
 
     SUBCASE("Can not receive message with CRC error") {
         interface.reset();
-        auto expectation = connection->expect("HEARTBEAT");
-        interface.addToReceiveQueue("\xfd\x09\x00\x00\x00\xfd\x01\x00\x00\x00\x04\x00\x00\x00\x01\x02\x03\x05\x06\x77\x54"s, interface_partner);
+        auto expectation = connection->expect("TEST_MESSAGE");
+        interface.addToReceiveQueue("\xfd\x10\x00\x00\x01\x61\x61\xbc\x26\x00\x2a\x00\x00\x00\x48\x65\x6c\x6c\x6f\x20\x57\x6f\x72\x6c\x64\x21\x53\xda"s, interface_partner);
         CHECK_THROWS_AS(auto message = connection->receive(expectation, 100), TimeoutException);
     }
 
@@ -183,7 +181,7 @@ TEST_CASE("Create network runtime") {
 
     SUBCASE("Receive throws a NetworkError if the interface fails") {
         interface.reset();
-        auto expectation = connection->expect("HEARTBEAT");
+        auto expectation = connection->expect("TEST_MESSAGE");
         interface.makeFailOnNextReceive();
         CHECK_THROWS_AS(auto message = connection->receive(expectation), NetworkError);
     }
