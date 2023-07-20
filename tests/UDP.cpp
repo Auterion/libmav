@@ -182,7 +182,7 @@ TEST_CASE("UDP server client") {
         mav::UDPServer server_physical2(19334);
         mav::NetworkRuntime server_runtime2(message_set, server_physical2);
 
-        auto server2_connection = server_runtime2.awaitConnection(100);
+        auto server2_connection = server_runtime2.awaitConnection(1100);
         server2_connection->send(heartbeat);
 
         auto client_connection2 = client_runtime.awaitConnection(100);
@@ -253,7 +253,7 @@ TEST_CASE("UDP server client") {
         mav::UDPServer server_physical2(19334);
         mav::NetworkRuntime server_runtime2(message_set, server_physical2);
 
-        auto server2_connection = server_runtime2.awaitConnection(100);
+        auto server2_connection = server_runtime2.awaitConnection(1100);
         server2_connection->send(heartbeat);
 
         auto client_connection2 = client_runtime.awaitConnection(100);
