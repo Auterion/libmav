@@ -37,7 +37,7 @@ In libmav, the message set is runtime defined and loaded from XML files.
 Any of the upstream XML files will work. The function also loads dependent XML files
 recursively.
 ```C++
-auto message_set = libmav::MessageSet("/path/to/common.xml");
+auto message_set = mav::MessageSet("/path/to/common.xml");
 ```
 
 You can also extend a loaded message set with additional XML files or inline XML:
@@ -94,7 +94,7 @@ loop and one to drive the HEARTBEAT transmission and timeout handling.
 
 ```C++
 // Create interface for physical network
-auto physical = libmav::TCPClient("<ip>", 14550);
+auto physical = mav::TCPClient("<ip>", 4560);
 
 auto heartbeat_message = message_set.create("HEARTBEAT");
 heartbeat_message.set({
@@ -109,7 +109,7 @@ heartbeat_message.set({
 // Create a network runtime with
 // This runtime will automatically send out HEARTBEAT messages, iff a HEARTBEAT
 // message is defined here
-auto runtime = libmav::NetworkRuntime(
+auto runtime = mav::NetworkRuntime(
         message_set, heartbeat_message, physical);
 
 // You can change the heartbeat message any time by calling
@@ -128,11 +128,11 @@ if (connection->alive()) {
 
 ```C++
 // Create interface for physical network
-auto physical = libmav::UDPServer(14559);
+auto physical = mav::UDPServer(14559);
 
 // Create a network runtime with
 // This runtime will not automatically send HEARTBEAT messages
-auto runtime = libmav::NetworkRuntime(message_set, physical);
+auto runtime = mav::NetworkRuntime(message_set, physical);
 
 // Handle incoming connections
 runtime.onConnection([](std::shared_ptr<mav::Connection> connection) {
@@ -146,7 +146,7 @@ runtime.onConnectionLost([](std::shared_ptr<mav::Connection> connection) {
 ```
 
 
-The classes will throw `libmav::NetworkError` if connection fails.
+The classes will throw `mav::NetworkError` if connection fails.
 
 ### Sending / receiving messages
 
@@ -169,7 +169,7 @@ conection.send(message);
 // ⚠️ Potential race condition here! (read below)
 
 // receive a message, with a 1s timeout
-auto response = connection.receive("PARAM_VALUE", 1000);
+auto response = connection->receive("PARAM_VALUE", 1000);
 ```
 
 The call to receive is blocking.
@@ -186,11 +186,11 @@ auto message = message_set.create("PARAM_REQUEST_READ") ({
 });
 
 // Already watch for the answer
-auto expectation = connection.expect("PARAM_VALUE");
+auto expectation = connection->expect("PARAM_VALUE");
 // send the message
 conection.send(message);
 // Wait for the answer, with a 1s timeout
-auto response = connection.receive(expecation, 1000);
+auto response = connection->receive(expecation, 1000);
 ```
 
 #### Receive using a callback
@@ -199,14 +199,14 @@ Alternatively, you can also register regular callbacks
 
 ```C++
 // adding a callback
-auto callback_handle = connection.addMessageCallback(
-        [](const libmav::Message& message) {
+auto callback_handle = connection->addMessageCallback(
+        [](const mav::Message& message) {
             std::cout << message.name() << std::endl;
         });
 
 // adding a callback with an error handler
-auto callback_handle = connection.addMessageCallback(
-        [](const libmav::Message& message) {
+auto callback_handle = connection->addMessageCallback(
+        [](const mav::Message& message) {
             std::cout << message.name() << std::endl;
         }, 
         [](const std::exception_ptr& exception) {
@@ -214,5 +214,5 @@ auto callback_handle = connection.addMessageCallback(
         });
 
 // removing a callback
-connection.removeMessageCallback(callback_handle);
+connection->removeMessageCallback(callback_handle);
 ```
