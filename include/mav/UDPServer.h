@@ -56,7 +56,7 @@ namespace mav {
         int _socket = -1;
 
         std::array<uint8_t, RX_BUFFER_SIZE> _rx_buffer;
-        int _bytes_available = 0;
+        uint32_t _bytes_available = 0;
         ConnectionPartner _current_partner;
 
     public:

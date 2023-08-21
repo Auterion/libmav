@@ -87,10 +87,10 @@ namespace mav {
 
         Message(const MessageDefinition &message_definition, ConnectionPartner source_partner, int crc_offset,
                 std::array<uint8_t, MessageDefinition::MAX_MESSAGE_SIZE> &&backing_memory) :
-                _message_definition(&message_definition),
                 _source_partner(source_partner),
-                _crc_offset(crc_offset),
-                _backing_memory(std::move(backing_memory)) {}
+                _backing_memory(std::move(backing_memory)),
+                _message_definition(&message_definition),
+                _crc_offset(crc_offset) {}
 
         inline bool isFinalized() const {
             return _crc_offset >= 0;
@@ -295,7 +295,7 @@ namespace mav {
                 throw std::invalid_argument(StringFormat() << "Field " << field_key <<
                                                         " is not of type char" << StringFormat::end);
             }
-            if (v.size() > field.type.size) {
+            if (static_cast<int>(v.size()) > field.type.size) {
                 throw std::out_of_range(StringFormat() << "String of length " << v.size() <<
                                                        " does not fit in field with size " << field.type.size <<
                                                        StringFormat::end);
@@ -327,7 +327,7 @@ namespace mav {
                     ret_value.resize(field.type.size);
                 }
 
-                if (ret_value.size() < field.type.size) {
+                if (static_cast<int>(ret_value.size()) < field.type.size) {
                     throw std::out_of_range(StringFormat() << "Array of size " << field.type.size <<
                         " can not fit in return type of size " << ret_value.size() << StringFormat::end);
                 }

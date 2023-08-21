@@ -80,7 +80,7 @@ namespace mav {
         virtual ConnectionPartner receive(uint8_t* destination, uint32_t size) = 0;
         virtual void markMessageBoundary() {};
         virtual void markSyncing() {};
-        virtual bool isConnectionOriented() const {
+        [[nodiscard]] virtual bool isConnectionOriented() const {
             return false;
         };
     };
@@ -289,8 +289,8 @@ namespace mav {
         NetworkRuntime(const Identifier &own_id, const MessageSet &message_set, NetworkInterface &interface,
                        std::function<void(const std::shared_ptr<Connection>&)> on_connection = {},
                        std::function<void(const std::shared_ptr<Connection>&)> on_connection_lost = {}) :
-                _own_id(own_id), _message_set(message_set),
-                _interface(interface), _parser(_message_set, _interface),
+                _interface(interface), _message_set(message_set),
+                _parser(_message_set, _interface), _own_id(own_id),
                 _on_connection(std::move(on_connection)), _on_connection_lost(std::move(on_connection_lost)) {
 
             _receive_thread = std::thread{

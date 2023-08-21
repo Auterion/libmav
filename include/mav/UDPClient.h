@@ -57,7 +57,7 @@ namespace mav {
         struct sockaddr_in _server_address{};
 
         std::array<uint8_t, RX_BUFFER_SIZE> _rx_buffer;
-        int _bytes_available = 0;
+        uint32_t _bytes_available = 0;
         ConnectionPartner _partner;
 
     public:
@@ -119,7 +119,7 @@ namespace mav {
             return _partner;
         }
 
-        void send(const uint8_t *data, uint32_t size, ConnectionPartner target) override {
+        void send(const uint8_t *data, uint32_t size, ConnectionPartner) override {
             // no need to specify target here, as we called the udp connect function in constructor
             if (sendto(_socket, data, size, 0, (struct sockaddr *) nullptr, 0) < 0) {
                 ::close(_socket);
