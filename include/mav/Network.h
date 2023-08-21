@@ -116,7 +116,7 @@ namespace mav {
                 backing_memory[0] = 0xFD;
                 _interface.receive(backing_memory.data() + 1, MessageDefinition::HEADER_SIZE -1);
                 Header header{backing_memory.data()};
-                const bool message_is_signed = header.incompatFlags() & 0x01;
+                const bool message_is_signed = header.isSigned();
                 const int wire_length = MessageDefinition::HEADER_SIZE + header.len() + MessageDefinition::CHECKSUM_SIZE +
                                   (message_is_signed ? MessageDefinition::SIGNATURE_SIZE : 0);
                 auto partner = _interface.receive(backing_memory.data() + MessageDefinition::HEADER_SIZE,

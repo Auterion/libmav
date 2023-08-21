@@ -222,6 +222,14 @@ namespace mav {
             return Header<uint8_t*>(_backing_memory.data());
         }
 
+        [[nodiscard]] const Signature<const uint8_t*> signature() const {
+            return Signature<const uint8_t*>(&_backing_memory[MessageDefinition::HEADER_SIZE + header().len() + MessageDefinition::CHECKSUM_SIZE]);
+        }
+
+        [[nodiscard]] Signature<uint8_t*> signature() {
+            return Signature<uint8_t*>(&_backing_memory[MessageDefinition::HEADER_SIZE + header().len() + MessageDefinition::CHECKSUM_SIZE]);
+        }
+
         [[nodiscard]] const ConnectionPartner& source() const {
             return _source_partner;
         }
