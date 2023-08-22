@@ -170,10 +170,9 @@ namespace mav {
 
         void _sendMessage(Message &message, const ConnectionPartner &partner) {
             const bool sign = bool(_get_timestamp_function);
-            int wire_length = static_cast<int>(message.finalize(_seq++, _own_id));
+            int wire_length = static_cast<int>(message.finalize(_seq++, _own_id, sign));
             if (sign) {
-                const uint64_t timestamp = _get_timestamp_function();
-                message.sign(timestamp, _key);
+                message.sign(_key, _get_timestamp_function());
                 wire_length += MessageDefinition::SIGNATURE_SIZE;
             }
             std::unique_lock<std::mutex> lock(_send_mutex);

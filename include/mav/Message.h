@@ -154,6 +154,35 @@ namespace mav {
             throw std::runtime_error("Unknown base type"); // should never happen
         }
 
+        uint64_t _computeSignatureHash48(const std::array<uint8_t, 32>& key) const {
+            // signature = sha256_48(secret_key + header + payload + CRC + link-ID + timestamp)
+            constexpr size_t maxSize = 32 + MessageDefinition::HEADER_SIZE +
+                                       MessageDefinition::MAX_PAYLOAD_SIZE +
+                                       MessageDefinition::CHECKSUM_SIZE + 1 + 6;
+            std::array<uint8_t, maxSize> data;
+            size_t actualSize = 0;
+            // secret_key
+            std::copy_n(key.begin(), 32, data.begin() + actualSize);
+            actualSize += 32;
+            // header + payload + CRC
+            const size_t dataSize =
+                MessageDefinition::HEADER_SIZE + header().len() + MessageDefinition::CHECKSUM_SIZE;
+            std::copy_n(_backing_memory.begin(), dataSize, data.begin() + actualSize);
+            actualSize += dataSize;
+            // link-ID
+            const uint8_t linkId = signature().linkId();
+            serialize(linkId, data.begin() + actualSize);
+            actualSize += 1;
+            // timestamp
+            const uint64_t timestamp = signature().timestamp();
+            serialize(timestamp, data.begin() + actualSize);
+            actualSize += 6;
+
+            std::vector<unsigned char> hash(picosha2::k_digest_size);
+            picosha2::hash256(data.begin(), data.begin() + actualSize, hash.begin(), hash.end());
+            return deserialize<uint64_t>(hash.data(), 6);
+        }
+
     public:
 
         static inline Message _instantiateFromMemory(const MessageDefinition &definition, ConnectionPartner source_partner,
@@ -448,39 +477,14 @@ namespace mav {
             return ss.str();
         }
 
-        void sign(const uint64_t& timestamp, const std::array<uint8_t, 32>& key) {
-            const uint8_t linkId = 0;
-            signature().linkId() = linkId;
-
+        void sign(const std::array<uint8_t, 32>& key, const uint64_t& timestamp) {
+            signature().linkId() = 0;
             signature().timestamp() = timestamp;
+            signature().signature() = _computeSignatureHash48(key);
+        }
 
-            // signature = sha256_48(secret_key + header + payload + CRC + link-ID + timestamp)
-            constexpr size_t maxSize = 32 + MessageDefinition::HEADER_SIZE +
-                                       MessageDefinition::MAX_PAYLOAD_SIZE +
-                                       MessageDefinition::CHECKSUM_SIZE + 1 + 6;
-            size_t actualSize = 0;
-            std::array<uint8_t, maxSize> data;
-            // secret_key
-            std::copy_n(key.begin(), 32, data.begin() + actualSize);
-            actualSize += 32;
-            // header + payload + CRC
-            const size_t dataSize =
-                MessageDefinition::HEADER_SIZE + header().len() + MessageDefinition::CHECKSUM_SIZE;
-            std::copy_n(_backing_memory.begin(), dataSize, data.begin() + actualSize);
-            actualSize += dataSize;
-            // link-ID
-            serialize(linkId, data.begin() + actualSize);
-            actualSize += 1;
-            // timestamp
-            serialize(timestamp, data.begin() + actualSize);
-            actualSize += 6;
-
-            std::vector<unsigned char> hash(picosha2::k_digest_size);
-            picosha2::hash256(data.begin(), data.begin() + actualSize + 1, hash.begin(),
-                              hash.end());
-            const uint64_t signatureHash_48 = deserialize<uint64_t>(hash.data(), 6);
-
-            signature().signature() = signatureHash_48;
+        [[nodiscard]] bool validate(const std::array<uint8_t, 32>& key) const {
+            return signature().signature() == _computeSignatureHash48(key);
         }
 
         [[nodiscard]] uint32_t finalize(uint8_t seq, const Identifier &sender, const bool sign = false) {
