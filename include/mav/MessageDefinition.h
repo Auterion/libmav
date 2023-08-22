@@ -266,20 +266,20 @@ namespace mav {
             return _backing_memory[0];
         }
 
-        inline uint8_t* timestamp() {
-            return &_backing_memory[1];
+        inline _SignatureField timestamp() {
+            return _SignatureField(_backing_memory + 1);
         }
 
-        [[nodiscard]] inline const uint8_t* timestamp() const {
-            return &_backing_memory[1];
+        [[nodiscard]] inline const _SignatureField timestamp() const {
+            return _SignatureField(_backing_memory + 1);
         }
 
-        inline uint8_t* signature() {
-            return &_backing_memory[7];
+        inline _SignatureField signature() {
+            return _SignatureField(_backing_memory + 7);
         }
 
-        [[nodiscard]] inline const uint8_t* signature() const {
-            return &_backing_memory[7];
+        [[nodiscard]] inline const _SignatureField signature() const {
+            return _SignatureField(_backing_memory + 7);
         }
     };
 

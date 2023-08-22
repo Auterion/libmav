@@ -157,6 +157,8 @@ namespace mav {
         std::mutex _heartbeat_message_mutex;
         StreamParser _parser;
         Identifier _own_id;
+        std::array<uint8_t, 32> _key;
+        std::function<uint64_t(void)> _get_timestamp_function;
         std::mutex _connections_mutex;
         std::mutex _send_mutex;
         std::unordered_map<ConnectionPartner, std::shared_ptr<Connection>, _ConnectionPartnerHash> _connections;
@@ -167,7 +169,13 @@ namespace mav {
         std::function<void(const std::shared_ptr<Connection>&)> _on_connection_lost;
 
         void _sendMessage(Message &message, const ConnectionPartner &partner) {
+            const bool sign = bool(_get_timestamp_function);
             int wire_length = static_cast<int>(message.finalize(_seq++, _own_id));
+            if (sign) {
+                const uint64_t timestamp = _get_timestamp_function();
+                message.sign(timestamp, _key);
+                wire_length += MessageDefinition::SIGNATURE_SIZE;
+            }
             std::unique_lock<std::mutex> lock(_send_mutex);
             _interface.send(message.data(), wire_length, partner);
         }
@@ -341,6 +349,14 @@ namespace mav {
         void clearHeartbeat() {
             std::lock_guard heartbeat_message_lock(_heartbeat_message_mutex);
             _heartbeat_message = std::nullopt;
+        }
+
+        void setGetTimestampFunction(std::function<uint64_t(void)> function) {
+            _get_timestamp_function = function;
+        }
+
+        void setKey(std::array<uint8_t, 32> key) {
+            _key = key;
         }
 
         void sendMessage(Message &message) {
