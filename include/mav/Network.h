@@ -161,10 +161,13 @@ namespace mav {
         std::function<uint64_t(void)> _get_timestamp_function;
         std::mutex _connections_mutex;
         std::mutex _send_mutex;
-        std::unordered_map<ConnectionPartner, std::shared_ptr<Connection>, _ConnectionPartnerHash> _connections;
+        std::unordered_map<ConnectionPartner,
+            std::variant<std::shared_ptr<Connection>, std::weak_ptr<Connection>>, _ConnectionPartnerHash> _connections;
         std::unique_ptr<std::promise<std::shared_ptr<Connection>>> _first_connection_promise = nullptr;
         uint8_t _seq = 0;
 
+        std::mutex _on_connection_mutex;
+        std::mutex _on_connection_lost_mutex;
         std::function<void(const std::shared_ptr<Connection>&)> _on_connection;
         std::function<void(const std::shared_ptr<Connection>&)> _on_connection_lost;
 
@@ -179,15 +182,37 @@ namespace mav {
             _interface.send(message.data(), wire_length, partner);
         }
 
-        std::shared_ptr<Connection> _addConnection(const ConnectionPartner partner) {
-            auto new_connection = std::make_shared<Connection>(_message_set, partner);
-            new_connection->template setSendMessageToNetworkFunc([this, partner](Message &message){
-                this->_sendMessage(message, partner);
-            });
+        inline bool _isConnectionExpired(const std::variant<std::shared_ptr<Connection>, std::weak_ptr<Connection>> &entry) const {
+            return std::holds_alternative<std::weak_ptr<Connection>>(entry);
+        }
 
-            _connections.insert({partner, new_connection});
-            if (_on_connection) {
-                _on_connection(new_connection);
+        std::shared_ptr<Connection> _addOrReviveConnection(const ConnectionPartner partner) {
+            std::shared_ptr<Connection> new_connection{nullptr};
+
+            // look for an existing, expired connection and revive it
+            auto it = _connections.find(partner);
+            if (it != _connections.end()
+                && _isConnectionExpired(it->second)) {
+                if (auto connection = std::get<std::weak_ptr<Connection>>(it->second).lock()) {
+                    // still somebody holding on to the connection, revive it
+                    it->second = connection;
+                    new_connection = connection;
+                }
+            }
+
+            if (!new_connection) {
+                // no existing connection, create a new one
+                new_connection = std::make_shared<Connection>(_message_set, partner);
+                new_connection->template setSendMessageToNetworkFunc([this, partner](Message &message){
+                    this->_sendMessage(message, partner);
+                });
+                _connections.insert({partner, new_connection});
+            }
+            {
+                std::lock_guard<std::mutex> lock(_on_connection_mutex);
+                if (_on_connection) {
+                    _on_connection(new_connection);
+                }
             }
 
             if (_first_connection_promise) {
@@ -197,6 +222,22 @@ namespace mav {
             return new_connection;
         }
 
+        void _expireConnection(std::variant<std::shared_ptr<Connection>, std::weak_ptr<Connection>> &entry,
+                               const std::exception_ptr &exception = nullptr) {
+            auto conn = std::get<std::shared_ptr<Connection>>(entry);
+            if (exception) {
+                conn->consumeNetworkExceptionFromNetwork(exception);
+            }
+            {
+                std::lock_guard<std::mutex> lock(_on_connection_lost_mutex);
+                if (_on_connection_lost) {
+                    _on_connection_lost(conn);
+                }
+            }
+
+            // make weak
+            entry = std::weak_ptr<Connection>(conn);
+        }
 
         void _receive_thread_function() {
             while (!_should_terminate.load()) {
@@ -205,26 +246,21 @@ namespace mav {
                     std::lock_guard<std::mutex> lock(_connections_mutex);
                     // get correct connection for this message
                     auto connection_entry = _connections.find(message.source());
-                    if (connection_entry == _connections.end()) {
+                    if (connection_entry == _connections.end() || _isConnectionExpired(connection_entry->second)) {
                         // we do not have a connection for this message, create one
-                        auto connection = _addConnection(message.source());
+                        auto connection = _addOrReviveConnection(message.source());
                         connection->consumeMessageFromNetwork(message);
                     } else {
-                        connection_entry->second->consumeMessageFromNetwork(message);
+                        // connection is alive, use it
+                        std::get<std::shared_ptr<Connection>>(connection_entry->second)->consumeMessageFromNetwork(message);
                     }
                 } catch (NetworkError &e) {
-                    // A connection might be refused initially if the other side is not up yet (e.g. UDP client). Continue
-                    // and let the upper layers handle any timeouts. If it happens later on we still forward the error.
-                    if (e.errnoNum() == ECONNREFUSED) {
-                        // Wait a bit to ensure there's no busy loop
-                        std::this_thread::sleep_for(std::chrono::milliseconds(100));
-                    } else {
-                        _should_terminate.store(true);
-                    }
                     // Spread the network error to all connections
                     std::lock_guard<std::mutex> lock(_connections_mutex);
                     for (auto& connection : _connections) {
-                        connection.second->consumeNetworkExceptionFromNetwork(std::make_exception_ptr(e));
+                        if (!_isConnectionExpired(connection.second)) {
+                            _expireConnection(connection.second, std::make_exception_ptr(e));
+                        }
                     }
                 } catch (NetworkInterfaceInterrupt &e) {
                     _should_terminate.store(true);
@@ -253,11 +289,12 @@ namespace mav {
                             }
                         }
                 } catch (NetworkError &e) {
-                    _should_terminate.store(true);
                     // Spread the network error to all connections
                     std::lock_guard<std::mutex> lock(_connections_mutex);
                     for (auto& connection : _connections) {
-                        connection.second->consumeNetworkExceptionFromNetwork(std::make_exception_ptr(e));
+                        if (!_isConnectionExpired(connection.second)) {
+                            _expireConnection(connection.second, std::make_exception_ptr(e));
+                        }
                     }
                 } catch (NetworkInterfaceInterrupt &e) {
                     _should_terminate.store(true);
@@ -267,27 +304,36 @@ namespace mav {
                 {
                     std::unique_lock<std::mutex> lock(_connections_mutex);
                     for (auto it = _connections.begin(); it != _connections.end();) {
-
-                        if (!it->second->alive()) {
-                            if (_on_connection_lost) {
-                                _on_connection_lost(it->second);
+                        if (_isConnectionExpired(it->second)) {
+                            // connection declared expired already
+                            if (std::get<std::weak_ptr<Connection>>(it->second).expired()) {
+                                // nobody is holding on to the connection anymore
+                                it = _connections.erase(it);
+                            } else {
+                                ++it;
                             }
-                            it = _connections.erase(it);
                         } else {
+                            // connection is still declared as alive
+                            if (!std::get<std::shared_ptr<Connection>>(it->second)->alive()) {
+                                // connection is dead
+                                _expireConnection(it->second);
+                            }
                             ++it;
                         }
                     }
                 }
-
                 std::this_thread::sleep_for(std::chrono::milliseconds(1000));
             }
         }
 
 
     public:
-        NetworkRuntime(const Identifier &own_id, const MessageSet &message_set, NetworkInterface &interface) :
+        NetworkRuntime(const Identifier &own_id, const MessageSet &message_set, NetworkInterface &interface,
+                       std::function<void(const std::shared_ptr<Connection>&)> on_connection = {},
+                       std::function<void(const std::shared_ptr<Connection>&)> on_connection_lost = {}) :
                 _own_id(own_id), _message_set(message_set),
-                _interface(interface), _parser(_message_set, _interface) {
+                _interface(interface), _parser(_message_set, _interface),
+                _on_connection(std::move(on_connection)), _on_connection_lost(std::move(on_connection_lost)) {
 
             _receive_thread = std::thread{
                 [this]() {
@@ -302,24 +348,33 @@ namespace mav {
             };
         }
 
-        NetworkRuntime(const MessageSet &message_set, NetworkInterface &interface) :
+        NetworkRuntime(const MessageSet &message_set, NetworkInterface &interface,
+                       std::function<void(const std::shared_ptr<Connection>&)> on_connection = {},
+                       std::function<void(const std::shared_ptr<Connection>&)> on_connection_lost = {}) :
                 NetworkRuntime({LIBMAV_DEFAULT_ID, LIBMAV_DEFAULT_ID},
-                               message_set, interface) {}
+                               message_set, interface, on_connection, on_connection_lost) {}
 
-        NetworkRuntime(const Identifier &own_id, const MessageSet &message_set, const Message &heartbeat_message, NetworkInterface &interface) :
-                NetworkRuntime(own_id, message_set, interface) {
+        NetworkRuntime(const Identifier &own_id, const MessageSet &message_set, const Message &heartbeat_message, NetworkInterface &interface,
+                       std::function<void(const std::shared_ptr<Connection>&)> on_connection = {},
+                       std::function<void(const std::shared_ptr<Connection>&)> on_connection_lost = {}) :
+                NetworkRuntime(own_id, message_set, interface, on_connection, on_connection_lost) {
             setHeartbeatMessage(heartbeat_message);
         }
 
-        NetworkRuntime(const MessageSet &message_set, const Message &heartbeat_message, NetworkInterface &interface) :
-                NetworkRuntime({LIBMAV_DEFAULT_ID, LIBMAV_DEFAULT_ID}, message_set, heartbeat_message, interface) {}
+        NetworkRuntime(const MessageSet &message_set, const Message &heartbeat_message, NetworkInterface &interface,
+                       std::function<void(const std::shared_ptr<Connection>&)> on_connection = {},
+                       std::function<void(const std::shared_ptr<Connection>&)> on_connection_lost = {}) :
+                NetworkRuntime({LIBMAV_DEFAULT_ID, LIBMAV_DEFAULT_ID},
+                                message_set, heartbeat_message, interface, on_connection, on_connection_lost) {}
 
 
         void onConnection(std::function<void(const std::shared_ptr<Connection>&)> on_connection) {
+            std::lock_guard<std::mutex> lock(_on_connection_mutex);
             _on_connection = std::move(on_connection);
         }
 
         void onConnectionLost(std::function<void(const std::shared_ptr<Connection>&)> on_connection_lost) {
+            std::lock_guard<std::mutex> lock(_on_connection_lost_mutex);
             _on_connection_lost = std::move(on_connection_lost);
         }
 
@@ -327,10 +382,15 @@ namespace mav {
             {
                 std::lock_guard<std::mutex> lock(_connections_mutex);
                 if (!_connections.empty()) {
-                    return _connections.begin()->second;
+                    for (auto& connection : _connections) {
+                        if (!_isConnectionExpired(connection.second)) {
+                            return std::get<std::shared_ptr<Connection>>(connection.second);
+                        }
+                    }
                 }
+                _first_connection_promise = std::make_unique<std::promise<std::shared_ptr<Connection>>>();
             }
-            _first_connection_promise = std::make_unique<std::promise<std::shared_ptr<Connection>>>();
+            
             auto fut = _first_connection_promise->get_future();
             if (timeout_ms >= 0) {
                 if (fut.wait_for(std::chrono::milliseconds(timeout_ms)) == std::future_status::timeout) {

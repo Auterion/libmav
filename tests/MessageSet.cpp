@@ -86,7 +86,7 @@ TEST_CASE("Create messages from set") {
     }
 
     SUBCASE("Can not get id for invalid message") {
-        CHECK_THROWS_AS(message_set.idForMessage("NOT_A_MESSAGE"), std::out_of_range);
+        CHECK_THROWS_AS((void)message_set.idForMessage("NOT_A_MESSAGE"), std::out_of_range);
     }
 
     SUBCASE("Can not get invalid message definition") {

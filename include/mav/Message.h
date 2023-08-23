@@ -449,6 +449,7 @@ namespace mav {
                     case FieldType::BaseType::DOUBLE: return get<std::vector<double>>(field_key);
                 }
             }
+            throw std::runtime_error("Unknown base type"); // should never happen
         }
 
         [[nodiscard]] std::string toString() const {
