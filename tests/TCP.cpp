@@ -48,7 +48,7 @@ TEST_CASE("TCP server client") {
 
         std::promise<void> connection_called_promise;
         auto connection_called_future = connection_called_promise.get_future();
-        server_runtime.onConnection([&connection_called_promise](const std::shared_ptr<mav::Connection> &connection) {
+        server_runtime.onConnection([&connection_called_promise](const std::shared_ptr<mav::Connection>&) {
             connection_called_promise.set_value();
         });
 
