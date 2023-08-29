@@ -98,7 +98,7 @@ auto physical = mav::TCPClient("<ip>", 4560);
 
 auto heartbeat_message = message_set.create("HEARTBEAT");
 heartbeat_message.set({
-    {"type", message_set.e("MAV_TYPE_GCS")},
+    {"type", message_set.e("MAV_TYPE_ONBOARD_CONTROLLER")},
     {"autopilot", message_set.e("MAV_AUTOPILOT_GENERIC")},
     {"base_mode", 0},
     {"custom_mode", 0},
