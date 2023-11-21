@@ -28,12 +28,18 @@ TEST_CASE("Message set creation") {
             <field type="float[3]" name="float_arr_field">description</field>
             <field type="int32_t[3]" name="int32_arr_field">description</field>
         </message>
+        <message id="9916" name="UINT8_ONLY_MESSAGE">
+            <field type="uint8_t" name="field1">description</field>
+            <field type="uint8_t" name="field2">description</field>
+            <field type="uint8_t" name="field3">description</field>
+            <field type="uint8_t" name="field4">description</field>
+        </message>
     </messages>
 </mavlink>
 )"""");
 
     REQUIRE(message_set.contains("BIG_MESSAGE"));
-    REQUIRE_EQ(message_set.size(), 1);
+    REQUIRE_EQ(message_set.size(), 2);
 
     auto message = message_set.create("BIG_MESSAGE");
     CHECK_EQ(message.id(), message_set.idForMessage("BIG_MESSAGE"));
@@ -212,8 +218,7 @@ TEST_CASE("Message set creation") {
     }
 
     SUBCASE("String at the end of message") {
-        message.set("uint32_field", 0x0);
-        message.set("int8_field", 0x0);
+        message.set("int8_field", 0x00);
         message.set("uint16_field", 0x0);
         message.set("int16_field", 0x0);
         message.set("uint32_field", 0x0);
@@ -236,4 +241,23 @@ TEST_CASE("Message set creation") {
         message.set("char_arr_field", "Hello Worldo!");
         CHECK_EQ(message.get<std::string>("char_arr_field"), "Hello Worldo!");
     }
+
+    SUBCASE("Zero elision works on single byte at end of array") {
+
+        auto this_test_message = message_set.create("UINT8_ONLY_MESSAGE");
+        this_test_message.set("field1", 111);
+        this_test_message.set("field2", 0);
+        this_test_message.set("field3", 0);
+        this_test_message.set("field4", 0);
+
+        uint32_t wire_size = this_test_message.finalize(5, {6, 7});
+        CHECK_EQ(wire_size, 13);
+        CHECK_EQ(this_test_message.get<uint8_t>("field1"), 111);
+        CHECK_EQ(this_test_message.get<uint8_t>("field2"), 0);
+        CHECK_EQ(this_test_message.get<uint8_t>("field3"), 0);
+        CHECK_EQ(this_test_message.get<uint8_t>("field4"), 0);
+    }
+
+
+
 }
