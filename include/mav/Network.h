@@ -372,6 +372,7 @@ namespace mav {
         }
 
         std::shared_ptr<Connection> awaitConnection(int timeout_ms = -1) {
+            std::future<std::shared_ptr<Connection>> future;
             {
                 std::lock_guard<std::mutex> lock(_connections_mutex);
                 if (!_connections.empty()) {
@@ -382,15 +383,15 @@ namespace mav {
                     }
                 }
                 _first_connection_promise = std::make_unique<std::promise<std::shared_ptr<Connection>>>();
+                future = _first_connection_promise->get_future();
             }
             
-            auto fut = _first_connection_promise->get_future();
             if (timeout_ms >= 0) {
-                if (fut.wait_for(std::chrono::milliseconds(timeout_ms)) == std::future_status::timeout) {
+                if (future.wait_for(std::chrono::milliseconds(timeout_ms)) == std::future_status::timeout) {
                     throw TimeoutException("Timeout while waiting for first connection");
                 }
             }
-            return fut.get();
+            return future.get();
         }
 
         void setHeartbeatMessage(const Message &message) {
