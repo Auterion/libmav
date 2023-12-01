@@ -80,7 +80,7 @@ namespace mav {
         virtual ConnectionPartner receive(uint8_t* destination, uint32_t size) = 0;
         virtual void markMessageBoundary() {};
         virtual void markSyncing() {};
-        virtual bool isConnectionOriented() const {
+        [[nodiscard]] virtual bool isConnectionOriented() const {
             return false;
         };
     };
@@ -331,8 +331,8 @@ namespace mav {
         NetworkRuntime(const Identifier &own_id, const MessageSet &message_set, NetworkInterface &interface,
                        std::function<void(const std::shared_ptr<Connection>&)> on_connection = {},
                        std::function<void(const std::shared_ptr<Connection>&)> on_connection_lost = {}) :
-                _own_id(own_id), _message_set(message_set),
-                _interface(interface), _parser(_message_set, _interface),
+                _interface(interface), _message_set(message_set),
+                _parser(_message_set, _interface), _own_id(own_id),
                 _on_connection(std::move(on_connection)), _on_connection_lost(std::move(on_connection_lost)) {
 
             _receive_thread = std::thread{
@@ -379,6 +379,7 @@ namespace mav {
         }
 
         std::shared_ptr<Connection> awaitConnection(int timeout_ms = -1) {
+            std::future<std::shared_ptr<Connection>> future;
             {
                 std::lock_guard<std::mutex> lock(_connections_mutex);
                 if (!_connections.empty()) {
@@ -389,15 +390,15 @@ namespace mav {
                     }
                 }
                 _first_connection_promise = std::make_unique<std::promise<std::shared_ptr<Connection>>>();
+                future = _first_connection_promise->get_future();
             }
             
-            auto fut = _first_connection_promise->get_future();
             if (timeout_ms >= 0) {
-                if (fut.wait_for(std::chrono::milliseconds(timeout_ms)) == std::future_status::timeout) {
+                if (future.wait_for(std::chrono::milliseconds(timeout_ms)) == std::future_status::timeout) {
                     throw TimeoutException("Timeout while waiting for first connection");
                 }
             }
-            return fut.get();
+            return future.get();
         }
 
         void setHeartbeatMessage(const Message &message) {
