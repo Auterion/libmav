@@ -117,7 +117,7 @@ namespace mav {
                 backing_memory[0] = 0xFD;
                 _interface.receive(backing_memory.data() + 1, MessageDefinition::HEADER_SIZE -1);
                 Header header{backing_memory.data()};
-                const bool message_is_signed = header.incompatFlags() & 0x01;
+                const bool message_is_signed = header.isSigned();
                 const int wire_length = MessageDefinition::HEADER_SIZE + header.len() + MessageDefinition::CHECKSUM_SIZE +
                                   (message_is_signed ? MessageDefinition::SIGNATURE_SIZE : 0);
                 auto partner = _interface.receive(backing_memory.data() + MessageDefinition::HEADER_SIZE,
@@ -158,6 +158,8 @@ namespace mav {
         std::mutex _heartbeat_message_mutex;
         StreamParser _parser;
         Identifier _own_id;
+        std::array<uint8_t, 32> _key;
+        std::function<uint64_t(void)> _get_timestamp_function;
         std::mutex _connections_mutex;
         std::mutex _send_mutex;
         std::unordered_map<ConnectionPartner,
@@ -171,7 +173,12 @@ namespace mav {
         std::function<void(const std::shared_ptr<Connection>&)> _on_connection_lost;
 
         void _sendMessage(Message &message, const ConnectionPartner &partner) {
-            int wire_length = static_cast<int>(message.finalize(_seq++, _own_id));
+            const bool sign = bool(_get_timestamp_function);
+            int wire_length = static_cast<int>(message.finalize(_seq++, _own_id, sign));
+            if (sign) {
+                message.sign(_key, _get_timestamp_function());
+                wire_length += MessageDefinition::SIGNATURE_SIZE;
+            }
             std::unique_lock<std::mutex> lock(_send_mutex);
             _interface.send(message.data(), wire_length, partner);
         }
@@ -407,6 +414,14 @@ namespace mav {
 
         void injectMessage(Message &message) {
             _sendMessage(message, {});
+        }
+
+        void setGetTimestampFunction(std::function<uint64_t(void)> function) {
+            _get_timestamp_function = function;
+        }
+
+        void setKey(std::array<uint8_t, 32> key) {
+            _key = key;
         }
 
         void stop() {
