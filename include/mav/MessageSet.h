@@ -35,7 +35,6 @@
 #define MAV_MESSAGESET_H
 
 #include <utility>
-#include <filesystem>
 #include <memory>
 #include <optional>
 
@@ -44,6 +43,15 @@
 
 #include "rapidxml/rapidxml.hpp"
 #include "rapidxml/rapidxml_utils.hpp"
+
+#ifdef _LIBCPP_VERSION
+#if _LIBCPP_VERSION < 11000
+#define _NO_STD_FILESYSTEM
+#endif
+#endif
+#ifndef _NO_STD_FILESYSTEM
+#include <filesystem>
+#endif
 
 namespace mav {
 
@@ -104,7 +112,7 @@ namespace mav {
         }
 
     public:
-
+#ifndef _NO_STD_FILESYSTEM
         static XMLParser forFile(const std::string &file_name) {
             auto file = std::make_shared<rapidxml::file<>>(file_name.c_str());
             auto doc = std::make_shared<rapidxml::xml_document<>>();
@@ -112,6 +120,7 @@ namespace mav {
 
             return {file, doc, std::filesystem::path{file_name}.parent_path().string()};
         }
+#endif // _NO_STD_FILESYSTEM
 
         static XMLParser forXMLString(const std::string &xml_string) {
             // pass by value on purpose, rapidxml mutates the string on parse
@@ -131,7 +140,7 @@ namespace mav {
             if (!root_node) {
                 throw std::runtime_error("Root node \"mavlink\" not found");
             }
-
+#ifndef _NO_STD_FILESYSTEM
             for (auto include_element = root_node->first_node("include");
                 include_element != nullptr;
                 include_element = include_element->next_sibling("include")) {
@@ -141,6 +150,7 @@ namespace mav {
                         (std::filesystem::path{_root_xml_folder_path} / include_name).string());
                 sub_parser.parse(out_enum, out_messages, out_message_ids);
             }
+#endif // _NO_STD_FILESYSTEM
 
             auto enums_node = root_node->first_node("enums");
             if (enums_node) {
@@ -215,6 +225,7 @@ namespace mav {
     public:
         MessageSet() = default;
 
+#ifndef _NO_STD_FILESYSTEM
         explicit MessageSet(const std::string &xml_path) {
             addFromXML(xml_path);
         }
@@ -223,6 +234,7 @@ namespace mav {
             XMLParser parser = XMLParser::forFile(file_path);
             parser.parse(_enums, _messages, _message_ids);
         }
+#endif // _NO_STD_FILESYSTEM
 
         void addFromXMLString(const std::string &xml_string) {
             XMLParser parser = XMLParser::forXMLString(xml_string);
