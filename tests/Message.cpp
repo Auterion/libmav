@@ -379,4 +379,20 @@ TEST_CASE("Message set creation") {
     }
 
 
+    SUBCASE("Sign a packet") {
+
+        std::array<uint8_t, 32> key;
+        for (int i = 0 ; i < 32; i++) key[i] = i;
+
+        uint64_t timestamp = 770479200;
+
+        uint32_t wire_size = message.finalize(5, {6, 7}, true);
+        message.sign(key, timestamp);
+
+        CHECK(message.header().isSigned());
+        CHECK_NE(message.signature().signature(), 0);
+        CHECK_EQ(message.signature().timestamp(), timestamp);
+        CHECK(message.validate(key));
+    }
+
 }

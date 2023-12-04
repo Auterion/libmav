@@ -29,6 +29,17 @@ Since the library is header only, you only need the library on the build system.
 
 You can also include the library as a submodule in your project.
 
+### Running the tests
+
+Libmav uses [doctest](https://github.com/doctest/doctest/).
+
+To run the tests, build the library, then run the test executable. Test results will be output to console.
+
+```bash
+mkdir build && cd build && cmake .. && make tests
+./tests/tests
+```
+
 ## Getting started
 
 ### Loading a message set
