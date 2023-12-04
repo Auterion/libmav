@@ -7,7 +7,8 @@ add_executable(tests
         MessageFieldIterator.cpp
         UDP.cpp
         TCP.cpp
-        opinionated_protocols/MissionClient.cpp)
+        opinionated_protocols/MissionClient.cpp
+        opinionated_protocols/ParamClient.cpp)
 
 add_test(NAME tests COMMAND tests)
 
