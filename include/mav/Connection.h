@@ -250,6 +250,10 @@ namespace mav {
         Message inline receive(int message_id, int timeout_ms=-1) {
             return receive(message_id, mav::ANY_ID, mav::ANY_ID, timeout_ms);
         }
+
+        Message inline receive(std::function<bool(const mav::Message&)> selector, int timeout_ms=-1) {
+            return receive(expect(std::move(selector)), timeout_ms);
+        }
     };
 
 };
