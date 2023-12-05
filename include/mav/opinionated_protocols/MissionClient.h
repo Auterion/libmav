@@ -13,6 +13,7 @@
 
 namespace mav {
 namespace mission {
+
     class MissionClient {
     private:
         std::shared_ptr<mav::Connection> _connection;
@@ -70,7 +71,7 @@ namespace mission {
 
                 if (seq == static_cast<int>(mission_messages.size()) - 1) {
                     // we expect an ack for the last message
-                    throwAssert(item_response["type"].as<int>() == 0, "Mission upload failed");
+                    throwAssert(item_response["type"].as<int>() == _message_set.e("MAV_MISSION_ACCEPTED"), "Mission upload failed");
                     seq++;
                 } else {
                     // we expect a request for the next message
@@ -80,17 +81,17 @@ namespace mission {
             }
         }
 
-        std::vector<Message> download(Identifier target={1, 1}, int retry_count=3, int item_timeout=1000) {
+        std::vector<Message> download(Identifier target={1, 1}, int mission_type=0, int retry_count=3, int item_timeout=1000) {
             // Send mission request list
             auto mission_request_list_message = _message_set.create("MISSION_REQUEST_LIST").set({
                 {"target_system", target.system_id},
                 {"target_component", target.component_id},
-                {"mission_type", 0}});
+                {"mission_type", mission_type}});
 
             auto request_list_response = exchangeRetry(_connection, mission_request_list_message, "MISSION_COUNT",
                           target.system_id, target.component_id, retry_count, item_timeout);
 
-            throwAssert(request_list_response["mission_type"].as<int>() == 0, "Mission type mismatch");
+            throwAssert(request_list_response["mission_type"].as<int>() == mission_type, "Mission type mismatch");
 
             int count = request_list_response["count"];
             std::vector<Message> mission_messages;
@@ -109,6 +110,13 @@ namespace mission {
 
                 mission_messages.push_back(request_response);
             }
+            auto ack_message = _message_set.create("MISSION_ACK").set({
+                {"target_system", target.system_id},
+                {"target_component", target.component_id},
+                {"type", _message_set.e("MAV_MISSION_ACCEPTED")},
+                {"mission_type", mission_type}});
+            _connection->send(ack_message);
+
             return mission_messages;
         }
     };

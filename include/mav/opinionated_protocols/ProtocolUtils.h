@@ -17,7 +17,7 @@ namespace mav {
         ProtocolError(const std::string &message) : std::runtime_error(message) {}
     };
 
-    void ensureMessageInMessageSet(const MessageSet &message_set, const std::initializer_list<std::string> &message_names) {
+    inline void ensureMessageInMessageSet(const MessageSet &message_set, const std::initializer_list<std::string> &message_names) {
         for (const auto &message_name : message_names) {
             if (!message_set.contains(message_name)) {
                 throw std::runtime_error("Message " + message_name + " not present in message set");
@@ -25,13 +25,13 @@ namespace mav {
         }
     }
 
-    void throwAssert(bool condition, const std::string& message) {
+    inline void throwAssert(bool condition, const std::string& message) {
         if (!condition) {
             throw ProtocolError(message);
         }
     }
 
-    Message exchange(
+    inline Message exchange(
             std::shared_ptr<mav::Connection> connection,
             Message &request,
             const std::string &response_message_name,
@@ -43,7 +43,7 @@ namespace mav {
         return connection->receive(expectation, timeout_ms);
     }
 
-    Message exchangeRetry(
+    inline Message exchangeRetry(
             const std::shared_ptr<mav::Connection>& connection,
             Message &request,
             const std::string &response_message_name,

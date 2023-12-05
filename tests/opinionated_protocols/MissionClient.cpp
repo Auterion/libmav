@@ -2,6 +2,7 @@
 #include "mav/opinionated_protocols/MissionClient.h"
 #include "mav/TCPClient.h"
 #include "mav/TCPServer.h"
+#include "ProtocolTestSequencer.h"
 
 using namespace mav;
 #define PORT 13975
@@ -118,6 +119,14 @@ TEST_CASE("Mission protocol client") {
         </enum>
     </enums>
     <messages>
+        <message id="0" name="HEARTBEAT">
+            <field type="uint8_t" name="type">Type of the MAV (quadrotor, helicopter, etc., up to 15 types, defined in MAV_TYPE ENUM)</field>
+            <field type="uint8_t" name="autopilot">Autopilot type / class. defined in MAV_AUTOPILOT ENUM</field>
+            <field type="uint8_t" name="base_mode">System mode bitfield, see MAV_MODE_FLAGS ENUM in mavlink/include/mavlink_types.h</field>
+            <field type="uint32_t" name="custom_mode">A bitfield for use for autopilot-specific flags.</field>
+            <field type="uint8_t" name="system_status">System status flag, see MAV_STATE ENUM</field>
+            <field type="uint8_t" name="mavlink_version">MAVLink version, not writable by user, gets added by protocol because of magic data type: uint8_t_mavlink_version</field>
+        </message>
         <message id="43" name="MISSION_REQUEST_LIST">
           <description>Request the overall list of mission items from the system/component.</description>
           <field type="uint8_t" name="target_system">System ID</field>
@@ -174,7 +183,7 @@ TEST_CASE("Mission protocol client") {
 )"""");
 
     mav::TCPServer server_physical(PORT);
-    mav::NetworkRuntime server_runtime(message_set, server_physical);
+    mav::NetworkRuntime server_runtime({1, 1}, message_set, server_physical);
 
     std::promise<void> connection_called_promise;
     auto connection_called_future = connection_called_promise.get_future();
@@ -203,16 +212,138 @@ TEST_CASE("Mission protocol client") {
 
 
     SUBCASE("Can upload mission") {
+
+        // mock the server response
+        ProtocolTestSequencer server_sequence(server_connection);
+        server_sequence
+            .in("MISSION_COUNT")
+            .out(message_set.create("MISSION_REQUEST_INT").set({
+                {"seq", 0},
+                {"mission_type", message_set.e("MAV_MISSION_TYPE_MISSION")},
+                {"target_system", LIBMAV_DEFAULT_ID},
+                {"target_component", LIBMAV_DEFAULT_ID}
+            }))
+            .in("MISSION_ITEM_INT")
+            .out(message_set.create("MISSION_REQUEST_INT").set({
+                {"seq", 1},
+                {"mission_type", message_set.e("MAV_MISSION_TYPE_MISSION")},
+                {"target_system", LIBMAV_DEFAULT_ID},
+                {"target_component", LIBMAV_DEFAULT_ID}
+            }))
+            .in("MISSION_ITEM_INT")
+            .out(message_set.create("MISSION_REQUEST_INT").set({
+                {"seq", 2},
+                {"mission_type", message_set.e("MAV_MISSION_TYPE_MISSION")},
+                {"target_system", LIBMAV_DEFAULT_ID},
+                {"target_component", LIBMAV_DEFAULT_ID}
+            }))
+            .in("MISSION_ITEM_INT")
+            .out(message_set.create("MISSION_ACK").set({
+                {"type", message_set.e("MAV_MISSION_ACCEPTED")},
+                {"mission_type", message_set.e("MAV_MISSION_TYPE_MISSION")},
+                {"target_system", LIBMAV_DEFAULT_ID},
+                {"target_component", LIBMAV_DEFAULT_ID}
+            }));
+
         std::vector<mav::Message> mission {
             mav::mission::TakeoffMessage(message_set).altitude_m(10),
             mav::mission::WaypointMessage(message_set).latitude_deg(47.397742).longitude_deg(8.545594).altitude_m(10),
             mav::mission::LandMessage(message_set).altitude_m(10)
         };
 
+        server_sequence.start();
         mav::mission::MissionClient mission_client(client_connection, message_set);
         mission_client.upload(mission);
+        server_sequence.finish();
+    }
 
-        auto downloaded_mission = mission_client.download();
+    SUBCASE("Can download mission") {
+
+        // mock the server response
+        ProtocolTestSequencer server_sequence(server_connection);
+        server_sequence
+            .in("MISSION_REQUEST_LIST")
+            .out(message_set.create("MISSION_COUNT").set({
+                {"count", 3},
+                {"mission_type", message_set.e("MAV_MISSION_TYPE_MISSION")},
+                {"target_system", LIBMAV_DEFAULT_ID},
+                {"target_component", LIBMAV_DEFAULT_ID}
+            }))
+            .in("MISSION_REQUEST_INT", [](auto &msg) {
+                CHECK_EQ(msg.template get<int>("seq"), 0);
+            })
+            .out(message_set.create("MISSION_ITEM_INT").set({
+                {"seq", 0},
+                {"frame", message_set.e("MAV_FRAME_GLOBAL_INT")},
+                {"command", message_set.e("MAV_CMD_NAV_TAKEOFF")},
+                {"current", 0},
+                {"autocontinue", 1},
+                {"param1", 0},
+                {"param2", 0},
+                {"param3", 0},
+                {"param4", 0},
+                {"x", 0},
+                {"y", 0},
+                {"z", 10},
+                {"mission_type", message_set.e("MAV_MISSION_TYPE_MISSION")},
+                {"target_system", LIBMAV_DEFAULT_ID},
+                {"target_component", LIBMAV_DEFAULT_ID}
+            }))
+            .in("MISSION_REQUEST_INT", [](auto &msg) {
+                CHECK_EQ(msg.template get<int>("seq"), 1);
+            })
+            .out(message_set.create("MISSION_ITEM_INT").set({
+                {"seq", 1},
+                {"frame", message_set.e("MAV_FRAME_GLOBAL_INT")},
+                {"command", message_set.e("MAV_CMD_NAV_WAYPOINT")},
+                {"current", 0},
+                {"autocontinue", 1},
+                {"param1", 0},
+                {"param2", 0},
+                {"param3", 0},
+                {"param4", 0},
+                {"x", 47.397742 * 1e7},
+                {"y", 8.545594 * 1e7},
+                {"z", 10},
+                {"mission_type", message_set.e("MAV_MISSION_TYPE_MISSION")},
+                {"target_system", LIBMAV_DEFAULT_ID},
+                {"target_component", LIBMAV_DEFAULT_ID}
+            }))
+            .in("MISSION_REQUEST_INT", [](auto &msg) {
+                CHECK_EQ(msg.template get<int>("seq"), 2);
+            })
+            .out(message_set.create("MISSION_ITEM_INT").set({
+                {"seq", 2},
+                {"frame", message_set.e("MAV_FRAME_GLOBAL_INT")},
+                {"command", message_set.e("MAV_CMD_NAV_LAND")},
+                {"current", 0},
+                {"autocontinue", 1},
+                {"param1", 0},
+                {"param2", 0},
+                {"param3", 0},
+                {"param4", 0},
+                {"x", 0},
+                {"y", 0},
+                {"z", 10},
+                {"mission_type", message_set.e("MAV_MISSION_TYPE_MISSION")},
+                {"target_system", LIBMAV_DEFAULT_ID},
+                {"target_component", LIBMAV_DEFAULT_ID}
+            })).in("MISSION_ACK", [&message_set](auto &msg) {
+                CHECK_EQ(msg.template get<int>("type"), message_set.e("MAV_MISSION_ACCEPTED"));
+            });
+
+        mav::mission::MissionClient mission_client(client_connection, message_set);
+        server_sequence.start();
+        auto mission = mission_client.download();
+        server_sequence.finish();
+
+        CHECK_EQ(mission.size(), 3);
+        CHECK_EQ(mission[0].name(), "MISSION_ITEM_INT");
+        CHECK_EQ(mission[0]["command"].as<uint64_t>(), message_set.e("MAV_CMD_NAV_TAKEOFF"));
+        CHECK_EQ(mission[1].name(), "MISSION_ITEM_INT");
+        CHECK_EQ(mission[1]["command"].as<uint64_t>(), message_set.e("MAV_CMD_NAV_WAYPOINT"));
+        CHECK_EQ(mission[2].name(), "MISSION_ITEM_INT");
+        CHECK_EQ(mission[2]["command"].as<uint64_t>(), message_set.e("MAV_CMD_NAV_LAND"));
     }
 }
 

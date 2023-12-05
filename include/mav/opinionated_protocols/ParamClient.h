@@ -37,6 +37,7 @@ namespace param {
         mav::Message readRaw(mav::Message &message, int target_system = mav::ANY_ID, int target_component = mav::ANY_ID, int retry_count=3, int item_timeout=1000) {
             throwAssert(message.name() == "PARAM_REQUEST_READ", "Message must be of type PARAM_REQUEST_READ");
             auto response = exchangeRetry(_connection, message, "PARAM_VALUE", target_system, target_component, retry_count, item_timeout);
+            return response;
         }
 
         std::variant<int, float> read(const std::string &param_id, int target_system = mav::ANY_ID, int target_component = mav::ANY_ID, int retry_count=3, int item_timeout=1000) {
@@ -54,6 +55,7 @@ namespace param {
             auto response = exchangeRetry(_connection, message, "PARAM_VALUE", target_system, target_component, retry_count, item_timeout);
             throwAssert(response["param_id"].as<std::string>() == message["param_id"].as<std::string>(), "Parameter ID mismatch");
             throwAssert(response["param_type"].as<float>() == message["param_type"].as<float>(), "Parameter type mismatch");
+            return response;
         }
 
         void write(const std::string &param_id, std::variant<int, float> value, int target_system = mav::ANY_ID, int target_component = mav::ANY_ID, int retry_count=3, int item_timeout=1000) {
@@ -100,7 +102,7 @@ namespace param {
                     result[i] = readRaw(_message_set.create("PARAM_REQUEST_READ").set({
                         {"target_system", target_system},
                         {"target_component", target_component},
-                        {"param_index", i}}), target_system, target_component);
+                        {"param_index", i}}), target_system, target_component, retry_count, item_timeout);
                 }
             }
             return result;
