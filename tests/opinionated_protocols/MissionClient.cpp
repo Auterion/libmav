@@ -210,50 +210,67 @@ TEST_CASE("Mission protocol client") {
 
     auto client_connection = client_runtime.awaitConnection(100);
 
+    std::vector<mav::Message> dummy_mission_short {
+            mav::mission::TakeoffMessage(message_set).altitude_m(10),
+    };
+
+    std::vector<mav::Message> dummy_mission_long {
+            mav::mission::TakeoffMessage(message_set).altitude_m(10),
+            mav::mission::WaypointMessage(message_set).latitude_deg(47.397742).longitude_deg(8.545594).altitude_m(10),
+            mav::mission::LandMessage(message_set).altitude_m(10)
+    };
+
+
+
 
     SUBCASE("Can upload mission") {
 
         // mock the server response
         ProtocolTestSequencer server_sequence(server_connection);
         server_sequence
-            .in("MISSION_COUNT")
-            .out(message_set.create("MISSION_REQUEST_INT").set({
+            .in("MISSION_COUNT", [](const mav::Message &msg) {
+                CHECK_EQ(msg["count"].as<int>(), 3);
+            })
+            .out(message_set.create("MISSION_REQUEST_INT")({
                 {"seq", 0},
                 {"mission_type", message_set.e("MAV_MISSION_TYPE_MISSION")},
                 {"target_system", LIBMAV_DEFAULT_ID},
                 {"target_component", LIBMAV_DEFAULT_ID}
             }))
-            .in("MISSION_ITEM_INT")
-            .out(message_set.create("MISSION_REQUEST_INT").set({
+            .in("MISSION_ITEM_INT", [](const mav::Message &msg) {
+                CHECK_EQ(msg["seq"].as<int>(), 0);
+                CHECK_EQ(msg["mission_type"].as<int>(), 0);
+            })
+            .out(message_set.create("MISSION_REQUEST_INT")({
                 {"seq", 1},
                 {"mission_type", message_set.e("MAV_MISSION_TYPE_MISSION")},
                 {"target_system", LIBMAV_DEFAULT_ID},
                 {"target_component", LIBMAV_DEFAULT_ID}
             }))
-            .in("MISSION_ITEM_INT")
-            .out(message_set.create("MISSION_REQUEST_INT").set({
+            .in("MISSION_ITEM_INT", [](const mav::Message &msg) {
+                CHECK_EQ(msg["seq"].as<int>(), 1);
+                CHECK_EQ(msg["mission_type"].as<int>(), 0);
+            })
+            .out(message_set.create("MISSION_REQUEST_INT")({
                 {"seq", 2},
                 {"mission_type", message_set.e("MAV_MISSION_TYPE_MISSION")},
                 {"target_system", LIBMAV_DEFAULT_ID},
                 {"target_component", LIBMAV_DEFAULT_ID}
             }))
-            .in("MISSION_ITEM_INT")
-            .out(message_set.create("MISSION_ACK").set({
+            .in("MISSION_ITEM_INT", [](const mav::Message &msg) {
+                CHECK_EQ(msg["seq"].as<int>(), 2);
+                CHECK_EQ(msg["mission_type"].as<int>(), 0);
+            })
+            .out(message_set.create("MISSION_ACK")({
                 {"type", message_set.e("MAV_MISSION_ACCEPTED")},
                 {"mission_type", message_set.e("MAV_MISSION_TYPE_MISSION")},
                 {"target_system", LIBMAV_DEFAULT_ID},
                 {"target_component", LIBMAV_DEFAULT_ID}
             }));
 
-        std::vector<mav::Message> mission {
-            mav::mission::TakeoffMessage(message_set).altitude_m(10),
-            mav::mission::WaypointMessage(message_set).latitude_deg(47.397742).longitude_deg(8.545594).altitude_m(10),
-            mav::mission::LandMessage(message_set).altitude_m(10)
-        };
-
         server_sequence.start();
         mav::mission::MissionClient mission_client(client_connection, message_set);
-        mission_client.upload(mission);
+        mission_client.upload(dummy_mission_long);
         server_sequence.finish();
     }
 
@@ -263,7 +280,7 @@ TEST_CASE("Mission protocol client") {
         ProtocolTestSequencer server_sequence(server_connection);
         server_sequence
             .in("MISSION_REQUEST_LIST")
-            .out(message_set.create("MISSION_COUNT").set({
+            .out(message_set.create("MISSION_COUNT")({
                 {"count", 3},
                 {"mission_type", message_set.e("MAV_MISSION_TYPE_MISSION")},
                 {"target_system", LIBMAV_DEFAULT_ID},
@@ -272,7 +289,7 @@ TEST_CASE("Mission protocol client") {
             .in("MISSION_REQUEST_INT", [](auto &msg) {
                 CHECK_EQ(msg.template get<int>("seq"), 0);
             })
-            .out(message_set.create("MISSION_ITEM_INT").set({
+            .out(message_set.create("MISSION_ITEM_INT")({
                 {"seq", 0},
                 {"frame", message_set.e("MAV_FRAME_GLOBAL_INT")},
                 {"command", message_set.e("MAV_CMD_NAV_TAKEOFF")},
@@ -292,7 +309,7 @@ TEST_CASE("Mission protocol client") {
             .in("MISSION_REQUEST_INT", [](auto &msg) {
                 CHECK_EQ(msg.template get<int>("seq"), 1);
             })
-            .out(message_set.create("MISSION_ITEM_INT").set({
+            .out(message_set.create("MISSION_ITEM_INT")({
                 {"seq", 1},
                 {"frame", message_set.e("MAV_FRAME_GLOBAL_INT")},
                 {"command", message_set.e("MAV_CMD_NAV_WAYPOINT")},
@@ -312,7 +329,7 @@ TEST_CASE("Mission protocol client") {
             .in("MISSION_REQUEST_INT", [](auto &msg) {
                 CHECK_EQ(msg.template get<int>("seq"), 2);
             })
-            .out(message_set.create("MISSION_ITEM_INT").set({
+            .out(message_set.create("MISSION_ITEM_INT")({
                 {"seq", 2},
                 {"frame", message_set.e("MAV_FRAME_GLOBAL_INT")},
                 {"command", message_set.e("MAV_CMD_NAV_LAND")},
@@ -345,5 +362,300 @@ TEST_CASE("Mission protocol client") {
         CHECK_EQ(mission[2].name(), "MISSION_ITEM_INT");
         CHECK_EQ(mission[2]["command"].as<uint64_t>(), message_set.e("MAV_CMD_NAV_LAND"));
     }
+
+    SUBCASE("Throws on receiving NACK on upload MISSION_COUNT") {
+        ProtocolTestSequencer server_sequence(server_connection);
+        server_sequence.in("MISSION_COUNT", [](auto &msg) {
+            CHECK_EQ(msg.template get<int>("count"), 3);
+        }).out(message_set.create("MISSION_ACK")({
+            {"type", message_set.e("MAV_MISSION_ERROR")},
+            {"mission_type", message_set.e("MAV_MISSION_TYPE_MISSION")},
+            {"target_system", LIBMAV_DEFAULT_ID},
+            {"target_component", LIBMAV_DEFAULT_ID}
+        }));
+
+        mav::mission::MissionClient mission_client(client_connection, message_set);
+        server_sequence.start();
+        CHECK_THROWS_AS(mission_client.upload(dummy_mission_long), mav::ProtocolException);
+        server_sequence.finish();
+    }
+
+    SUBCASE("Throws on receiving NACK on upload MISSION_ITEM") {
+        ProtocolTestSequencer server_sequence(server_connection);
+        server_sequence
+        .in("MISSION_COUNT", [](auto &msg) {
+            CHECK_EQ(msg.template get<int>("count"), 3);
+        })
+        .out(message_set.create("MISSION_REQUEST_INT")({
+            {"seq", 0},
+            {"mission_type", message_set.e("MAV_MISSION_TYPE_MISSION")},
+            {"target_system", LIBMAV_DEFAULT_ID},
+            {"target_component", LIBMAV_DEFAULT_ID}
+        }))
+        .in("MISSION_ITEM_INT", [](auto &msg) {
+            CHECK_EQ(msg.template get<int>("seq"), 0);
+        })
+        .out(message_set.create("MISSION_ACK")({
+            {"type", message_set.e("MAV_MISSION_ERROR")},
+            {"mission_type", message_set.e("MAV_MISSION_TYPE_MISSION")},
+            {"target_system", LIBMAV_DEFAULT_ID},
+            {"target_component", LIBMAV_DEFAULT_ID}
+        }));
+
+        mav::mission::MissionClient mission_client(client_connection, message_set);
+        server_sequence.start();
+        CHECK_THROWS_AS(mission_client.upload(dummy_mission_long), mav::ProtocolException);
+        server_sequence.finish();
+    }
+
+    SUBCASE("Throws on a timeout after not receiving responses on upload") {
+        ProtocolTestSequencer server_sequence(server_connection);
+        server_sequence
+        .in("MISSION_COUNT", [](auto &msg) {
+            CHECK_EQ(msg.template get<int>("count"), 3);
+        })
+        .out(message_set.create("MISSION_REQUEST_INT")({
+            {"seq", 0},
+            {"mission_type", message_set.e("MAV_MISSION_TYPE_MISSION")},
+            {"target_system", LIBMAV_DEFAULT_ID},
+            {"target_component", LIBMAV_DEFAULT_ID}
+        }))
+        .in("MISSION_ITEM_INT", [](auto &msg) {
+            CHECK_EQ(msg.template get<int>("seq"), 0);
+        });
+
+        mav::mission::MissionClient mission_client(client_connection, message_set);
+        server_sequence.start();
+        CHECK_THROWS_AS(mission_client.upload(dummy_mission_long), mav::TimeoutException);
+        server_sequence.finish();
+    }
+
+    SUBCASE("Re-tries 3 times when no response from server") {
+        ProtocolTestSequencer server_sequence(server_connection);
+        server_sequence
+        .in("MISSION_COUNT")
+        .in("MISSION_COUNT")
+        .in("MISSION_COUNT")
+        .out(message_set.create("MISSION_REQUEST_INT")({
+            {"seq", 0},
+            {"mission_type", message_set.e("MAV_MISSION_TYPE_MISSION")},
+            {"target_system", LIBMAV_DEFAULT_ID},
+            {"target_component", LIBMAV_DEFAULT_ID}
+        }))
+        .in("MISSION_ITEM_INT")
+        .in("MISSION_ITEM_INT")
+        .in("MISSION_ITEM_INT")
+        .out(message_set.create("MISSION_ACK")({
+            {"type", message_set.e("MAV_MISSION_ACCEPTED")},
+            {"mission_type", message_set.e("MAV_MISSION_TYPE_MISSION")},
+            {"target_system", LIBMAV_DEFAULT_ID},
+            {"target_component", LIBMAV_DEFAULT_ID}
+        }));
+
+        mav::mission::MissionClient mission_client(client_connection, message_set);
+        server_sequence.start();
+        mission_client.upload(dummy_mission_short);
+        server_sequence.finish();
+    }
+
+    SUBCASE("Throws on early-accept of mission 1") {
+        ProtocolTestSequencer server_sequence(server_connection);
+        server_sequence
+        .in("MISSION_COUNT", [](auto &msg) {
+            CHECK_EQ(msg.template get<int>("count"), 3);
+        })
+        .out(message_set.create("MISSION_ACK")({
+            {"type", message_set.e("MAV_MISSION_ACCEPTED")},
+            {"mission_type", message_set.e("MAV_MISSION_TYPE_MISSION")},
+            {"target_system", LIBMAV_DEFAULT_ID},
+            {"target_component", LIBMAV_DEFAULT_ID}
+        }));
+
+        mav::mission::MissionClient mission_client(client_connection, message_set);
+        server_sequence.start();
+        CHECK_THROWS_AS(mission_client.upload(dummy_mission_long), mav::ProtocolException);
+        server_sequence.finish();
+    }
+
+    SUBCASE("Throws on early-accept of mission 2") {
+            ProtocolTestSequencer server_sequence(server_connection);
+        server_sequence
+        .in("MISSION_COUNT", [](auto &msg) {
+            CHECK_EQ(msg.template get<int>("count"), 3);
+        })
+        .out(message_set.create("MISSION_REQUEST_INT")({
+            {"seq", 0},
+            {"mission_type", message_set.e("MAV_MISSION_TYPE_MISSION")},
+            {"target_system", LIBMAV_DEFAULT_ID},
+            {"target_component", LIBMAV_DEFAULT_ID}
+        }))
+        .in("MISSION_ITEM_INT", [](auto &msg) {
+            CHECK_EQ(msg.template get<int>("seq"), 0);
+        })
+        .out(message_set.create("MISSION_ACK")({
+            {"type", message_set.e("MAV_MISSION_ACCEPTED")},
+            {"mission_type", message_set.e("MAV_MISSION_TYPE_MISSION")},
+            {"target_system", LIBMAV_DEFAULT_ID},
+            {"target_component", LIBMAV_DEFAULT_ID}
+        }));
+
+        mav::mission::MissionClient mission_client(client_connection, message_set);
+        server_sequence.start();
+        CHECK_THROWS_AS(mission_client.upload(dummy_mission_long), mav::ProtocolException);
+        server_sequence.finish();
+    }
+
+    SUBCASE("Happy to re-upload missed items") {
+        ProtocolTestSequencer server_sequence(server_connection);
+        server_sequence
+        .in("MISSION_COUNT", [](auto &msg) {
+            CHECK_EQ(msg.template get<int>("count"), 3);
+        })
+        .out(message_set.create("MISSION_REQUEST_INT")({
+            {"seq", 0},
+            {"mission_type", message_set.e("MAV_MISSION_TYPE_MISSION")},
+            {"target_system", LIBMAV_DEFAULT_ID},
+            {"target_component", LIBMAV_DEFAULT_ID}
+        }))
+        .in("MISSION_ITEM_INT", [](auto &msg) {
+            CHECK_EQ(msg.template get<int>("seq"), 0);
+        })
+        .out(message_set.create("MISSION_REQUEST_INT")({
+            {"seq", 0},
+            {"mission_type", message_set.e("MAV_MISSION_TYPE_MISSION")},
+            {"target_system", LIBMAV_DEFAULT_ID},
+            {"target_component", LIBMAV_DEFAULT_ID}
+        }))
+        .in("MISSION_ITEM_INT", [](auto &msg) {
+            CHECK_EQ(msg.template get<int>("seq"), 0);
+        }).out(message_set.create("MISSION_REQUEST_INT")({
+            {"seq", 1},
+            {"mission_type", message_set.e("MAV_MISSION_TYPE_MISSION")},
+            {"target_system", LIBMAV_DEFAULT_ID},
+            {"target_component", LIBMAV_DEFAULT_ID}
+        })).in("MISSION_ITEM_INT", [](auto &msg) {
+            CHECK_EQ(msg.template get<int>("seq"), 1);
+        }).out(message_set.create("MISSION_REQUEST_INT")({
+            {"seq", 2},
+            {"mission_type", message_set.e("MAV_MISSION_TYPE_MISSION")},
+            {"target_system", LIBMAV_DEFAULT_ID},
+            {"target_component", LIBMAV_DEFAULT_ID}
+        })).in("MISSION_ITEM_INT", [](auto &msg) {
+            CHECK_EQ(msg.template get<int>("seq"), 2);
+        }).out(message_set.create("MISSION_REQUEST_INT")({
+            {"seq", 2},
+            {"mission_type", message_set.e("MAV_MISSION_TYPE_MISSION")},
+            {"target_system", LIBMAV_DEFAULT_ID},
+            {"target_component", LIBMAV_DEFAULT_ID}
+        })).in("MISSION_ITEM_INT", [](auto &msg) {
+            CHECK_EQ(msg.template get<int>("seq"), 2);
+        }).out(message_set.create("MISSION_ACK")({
+            {"type", message_set.e("MAV_MISSION_ACCEPTED")},
+            {"mission_type", message_set.e("MAV_MISSION_TYPE_MISSION")},
+            {"target_system", LIBMAV_DEFAULT_ID},
+            {"target_component", LIBMAV_DEFAULT_ID}
+        }));
+
+        mav::mission::MissionClient mission_client(client_connection, message_set);
+        server_sequence.start();
+        mission_client.upload(dummy_mission_long);
+        server_sequence.finish();
+    }
+
+    SUBCASE("Throws on NACK on download mission count") {
+        ProtocolTestSequencer server_sequence(server_connection);
+        server_sequence
+        .in("MISSION_REQUEST_LIST")
+        .out(message_set.create("MISSION_ACK")({
+            {"type", message_set.e("MAV_MISSION_ERROR")},
+            {"mission_type", message_set.e("MAV_MISSION_TYPE_MISSION")},
+            {"target_system", LIBMAV_DEFAULT_ID},
+            {"target_component", LIBMAV_DEFAULT_ID}
+        }));
+
+        mav::mission::MissionClient mission_client(client_connection, message_set);
+        server_sequence.start();
+        CHECK_THROWS_AS(mission_client.download(), mav::ProtocolException);
+        server_sequence.finish();
+    }
+
+    SUBCASE("Throws on NACK on download mission request item") {
+        ProtocolTestSequencer server_sequence(server_connection);
+        server_sequence
+        .in("MISSION_REQUEST_LIST")
+        .out(message_set.create("MISSION_COUNT")({
+            {"count", 3},
+            {"mission_type", message_set.e("MAV_MISSION_TYPE_MISSION")},
+            {"target_system", LIBMAV_DEFAULT_ID},
+            {"target_component", LIBMAV_DEFAULT_ID}
+        }))
+        .in("MISSION_REQUEST_INT", [](auto &msg) {
+            CHECK_EQ(msg.template get<int>("seq"), 0);
+        })
+        .out(message_set.create("MISSION_ACK")({
+            {"type", message_set.e("MAV_MISSION_ERROR")},
+            {"mission_type", message_set.e("MAV_MISSION_TYPE_MISSION")},
+            {"target_system", LIBMAV_DEFAULT_ID},
+            {"target_component", LIBMAV_DEFAULT_ID}
+        }));
+
+        mav::mission::MissionClient mission_client(client_connection, message_set);
+        server_sequence.start();
+        CHECK_THROWS_AS(mission_client.download(), mav::ProtocolException);
+        server_sequence.finish();
+    }
+
+
+    SUBCASE("Download times out if no response") {
+        ProtocolTestSequencer server_sequence(server_connection);
+        server_sequence
+        .in("MISSION_REQUEST_LIST")
+        .out(message_set.create("MISSION_COUNT")({
+            {"count", 3},
+            {"mission_type", message_set.e("MAV_MISSION_TYPE_MISSION")},
+            {"target_system", LIBMAV_DEFAULT_ID},
+            {"target_component", LIBMAV_DEFAULT_ID}
+        }))
+        .in("MISSION_REQUEST_INT", [](auto &msg) {
+            CHECK_EQ(msg.template get<int>("seq"), 0);
+        });
+
+        mav::mission::MissionClient mission_client(client_connection, message_set);
+        server_sequence.start();
+        CHECK_THROWS_AS(mission_client.download(), mav::TimeoutException);
+        server_sequence.finish();
+    }
+
+    SUBCASE("Download tries three times to download an item before giving up") {
+        ProtocolTestSequencer server_sequence(server_connection);
+        server_sequence
+        .in("MISSION_REQUEST_LIST")
+        .out(message_set.create("MISSION_COUNT")({
+            {"count", 1},
+            {"mission_type", message_set.e("MAV_MISSION_TYPE_MISSION")},
+            {"target_system", LIBMAV_DEFAULT_ID},
+            {"target_component", LIBMAV_DEFAULT_ID}
+        }))
+        .in("MISSION_REQUEST_INT")
+        .in("MISSION_REQUEST_INT")
+        .in("MISSION_REQUEST_INT")
+        .out(message_set.create("MISSION_ITEM_INT")({
+            {"seq", 0},
+            {"frame", message_set.e("MAV_FRAME_GLOBAL_INT")},
+            {"command", message_set.e("MAV_CMD_NAV_WAYPOINT")},
+            {"autocontinue", 1},
+            {"mission_type", message_set.e("MAV_MISSION_TYPE_MISSION")},
+            {"target_system", LIBMAV_DEFAULT_ID},
+            {"target_component", LIBMAV_DEFAULT_ID}
+        }))
+        .in("MISSION_ACK");
+
+        mav::mission::MissionClient mission_client(client_connection, message_set);
+        server_sequence.start();
+        auto mission = mission_client.download();
+        server_sequence.finish();
+        CHECK_EQ(mission.size(), 1);
+    }
+
 }
 
