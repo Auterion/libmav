@@ -386,9 +386,9 @@ TEST_CASE("Message set creation") {
 
         uint64_t timestamp = 770479200;
 
-        uint32_t wire_size = message.finalize(5, {6, 7}, true);
-        message.sign(key, timestamp);
+        uint32_t wire_size = message.finalize(5, {6, 7}, key, timestamp);
 
+        CHECK_EQ(wire_size, 26);
         CHECK(message.header().isSigned());
         CHECK_NE(message.signature().signature(), 0);
         CHECK_EQ(message.signature().timestamp(), timestamp);

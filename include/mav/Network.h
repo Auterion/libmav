@@ -43,6 +43,7 @@
 #include <atomic>
 #include <iostream>
 #include <memory>
+#include <chrono>
 #include <utility>
 #include <future>
 #include "Connection.h"
@@ -145,6 +146,10 @@ namespace mav {
         }
     };
 
+    static uint64_t _get_timestamp_function_default() {
+        const auto now = std::chrono::system_clock::now();
+        return std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
+    }
 
     class NetworkRuntime {
     private:
@@ -158,7 +163,8 @@ namespace mav {
         std::mutex _heartbeat_message_mutex;
         StreamParser _parser;
         Identifier _own_id;
-        std::array<uint8_t, 32> _key;
+        bool _sign;
+        std::array<uint8_t, MessageDefinition::KEY_SIZE> _key;
         std::function<uint64_t(void)> _get_timestamp_function;
         std::mutex _connections_mutex;
         std::mutex _send_mutex;
@@ -173,11 +179,11 @@ namespace mav {
         std::function<void(const std::shared_ptr<Connection>&)> _on_connection_lost;
 
         void _sendMessage(Message &message, const ConnectionPartner &partner) {
-            const bool sign = bool(_get_timestamp_function);
-            int wire_length = static_cast<int>(message.finalize(_seq++, _own_id, sign));
-            if (sign) {
-                message.sign(_key, _get_timestamp_function());
-                wire_length += MessageDefinition::SIGNATURE_SIZE;
+            int wire_length;
+            if (_sign) {
+                wire_length = static_cast<int>(message.finalize(_seq++, _own_id, _key, _get_timestamp_function()));
+            } else {
+                wire_length = static_cast<int>(message.finalize(_seq++, _own_id));
             }
             std::unique_lock<std::mutex> lock(_send_mutex);
             _interface.send(message.data(), wire_length, partner);
@@ -334,6 +340,7 @@ namespace mav {
                        std::function<void(const std::shared_ptr<Connection>&)> on_connection_lost = {}) :
                 _interface(interface), _message_set(message_set),
                 _parser(_message_set, _interface), _own_id(own_id),
+                _sign(false), _get_timestamp_function(_get_timestamp_function_default),
                 _on_connection(std::move(on_connection)), _on_connection_lost(std::move(on_connection_lost)) {
 
             _receive_thread = std::thread{
@@ -416,12 +423,15 @@ namespace mav {
             _sendMessage(message, {});
         }
 
-        void setGetTimestampFunction(std::function<uint64_t(void)> function) {
-            _get_timestamp_function = function;
+        void enableMessageSigning(std::array<uint8_t, MessageDefinition::KEY_SIZE> key,
+                                  std::function<uint64_t(void)> timestampFunction = _get_timestamp_function_default) {
+            _sign = true;
+            _key = key;
+            _get_timestamp_function = timestampFunction;
         }
 
-        void setKey(std::array<uint8_t, 32> key) {
-            _key = key;
+        void disableMessageSigning() {
+            _sign = false;
         }
 
         void stop() {
