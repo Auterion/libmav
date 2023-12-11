@@ -256,7 +256,7 @@ namespace mav {
                             _expireConnection(connection.second, std::make_exception_ptr(e));
                         }
                     }
-                } catch (NetworkInterfaceInterrupt) {
+                } catch (NetworkInterfaceInterrupt&) {
                     _should_terminate.store(true);
                 }
             }
@@ -290,7 +290,7 @@ namespace mav {
                             _expireConnection(connection.second, std::make_exception_ptr(e));
                         }
                     }
-                } catch (NetworkInterfaceInterrupt) {
+                } catch (NetworkInterfaceInterrupt&) {
                     _should_terminate.store(true);
                 }
 
