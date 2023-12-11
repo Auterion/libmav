@@ -83,6 +83,7 @@ namespace mav {
         [[nodiscard]] virtual bool isConnectionOriented() const {
             return false;
         };
+        virtual ~NetworkInterface() = default;
     };
 
 
