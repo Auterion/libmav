@@ -76,16 +76,13 @@ namespace mav {
     class Message {
         friend MessageSet;
     private:
-        ConnectionPartner _source_partner;
+        ConnectionPartner _source_partner{};
         std::array<uint8_t, MessageDefinition::MAX_MESSAGE_SIZE> _backing_memory{};
-        const MessageDefinition* _message_definition;
-        int _crc_offset = -1;
+        const MessageDefinition* _message_definition{nullptr};
+        int _crc_offset{-1};
 
         explicit Message(const MessageDefinition &message_definition) :
-            _source_partner({}),
-            _backing_memory({}),
-            _message_definition(&message_definition),
-            _crc_offset(-1) {
+            _message_definition(&message_definition) {
         }
 
         Message(const MessageDefinition &message_definition, ConnectionPartner source_partner, int crc_offset,
