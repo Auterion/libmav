@@ -203,25 +203,25 @@ namespace mav {
     }
 
 
-    template<typename A, typename B>
-    A _packUnpack(B b) {
-        union U {
-            A a;
-            B b;
-        };
-        U u;
-        u.b = b;
-        return u.a;
+    template<typename To, typename From>
+    To _packUnpack(From o) {
+        static_assert(sizeof(To) == sizeof(From), "Cannot pack/unpack different sizes");
+        static_assert(std::is_trivially_copyable<To>::value, "Cannot pack/unpack non-trivially copyable types");
+        static_assert(std::is_trivially_copyable<From>::value, "Cannot pack/unpack non-trivially copyable types");
+        To result;
+        std::memcpy(&result, &o, sizeof(To));
+        return result;
+    }
+    
+
+    template<typename To>
+    To floatUnpack(float f) {
+        return _packUnpack<To, float>(f);
     }
 
-    template<typename T>
-    T floatUnpack(float f) {
-        return _packUnpack<T, float>(f);
-    }
-
-    template<typename T>
-    float floatPack(T o) {
-        return _packUnpack<float, T>(o);
+    template<typename From>
+    float floatPack(From o) {
+        return _packUnpack<float, From>(o);
     }
 
 
