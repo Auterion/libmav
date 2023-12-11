@@ -459,15 +459,15 @@ namespace mav {
                             - MessageDefinition::HEADER_SIZE, 1);
 
             header().magic() = 0xFD;
-            header().len() = payload_size;
+            header().len() = static_cast<uint8_t>(payload_size);
             header().incompatFlags() = 0;
             header().compatFlags() = 0;
             header().seq() = seq;
             if (header().systemId() == 0) {
-                header().systemId() = sender.system_id;
+                header().systemId() = static_cast<uint8_t>(sender.system_id);
             }
             if (header().componentId() == 0) {
-                header().componentId() = sender.component_id;
+                header().componentId() = static_cast<uint8_t>(sender.component_id);
             }
             header().msgId() = _message_definition->id();
 
