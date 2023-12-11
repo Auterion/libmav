@@ -82,7 +82,10 @@ namespace mav {
         int _crc_offset = -1;
 
         explicit Message(const MessageDefinition &message_definition) :
-            _message_definition(&message_definition) {
+            _source_partner({}),
+            _backing_memory({}),
+            _message_definition(&message_definition),
+            _crc_offset(-1) {
         }
 
         Message(const MessageDefinition &message_definition, ConnectionPartner source_partner, int crc_offset,

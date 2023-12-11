@@ -32,6 +32,7 @@
  * 
  ****************************************************************************/
 
+#include <cstring>
 #include <sstream>
 #include <string_view>
 #include <chrono>
