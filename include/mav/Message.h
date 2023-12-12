@@ -76,10 +76,10 @@ namespace mav {
     class Message {
         friend MessageSet;
     private:
-        ConnectionPartner _source_partner;
+        ConnectionPartner _source_partner{};
         std::array<uint8_t, MessageDefinition::MAX_MESSAGE_SIZE> _backing_memory{};
-        const MessageDefinition* _message_definition;
-        int _crc_offset = -1;
+        const MessageDefinition* _message_definition{nullptr};
+        int _crc_offset{-1};
 
         explicit Message(const MessageDefinition &message_definition) :
             _message_definition(&message_definition) {
@@ -456,15 +456,15 @@ namespace mav {
                             - MessageDefinition::HEADER_SIZE, 1);
 
             header().magic() = 0xFD;
-            header().len() = payload_size;
+            header().len() = static_cast<uint8_t>(payload_size);
             header().incompatFlags() = 0;
             header().compatFlags() = 0;
             header().seq() = seq;
             if (header().systemId() == 0) {
-                header().systemId() = sender.system_id;
+                header().systemId() = static_cast<uint8_t>(sender.system_id);
             }
             if (header().componentId() == 0) {
-                header().componentId() = sender.component_id;
+                header().componentId() = static_cast<uint8_t>(sender.component_id);
             }
             header().msgId() = _message_definition->id();
 

@@ -34,12 +34,25 @@ TEST_CASE("Message set creation") {
             <field type="uint8_t" name="field3">description</field>
             <field type="uint8_t" name="field4">description</field>
         </message>
+        <message id="9917" name="ARRAY_ONLY_MESSAGE">
+            <field type="char[6]" name="field1">description</field>
+            <field type="uint8_t[3]" name="field2">description</field>
+            <field type="uint16_t[3]" name="field3">description</field>
+            <field type="uint32_t[3]" name="field4">description</field>
+            <field type="uint64_t[3]" name="field5">description</field>
+            <field type="int8_t[3]" name="field6">description</field>
+            <field type="int16_t[3]" name="field7">description</field>
+            <field type="int32_t[3]" name="field8">description</field>
+            <field type="int64_t[3]" name="field9">description</field>
+            <field type="float[3]" name="field10">description</field>
+            <field type="double[3]" name="field11">description</field>
+        </message>
     </messages>
 </mavlink>
 )"""");
 
     REQUIRE(message_set.contains("BIG_MESSAGE"));
-    REQUIRE_EQ(message_set.size(), 2);
+    REQUIRE_EQ(message_set.size(), 3);
 
     auto message = message_set.create("BIG_MESSAGE");
     CHECK_EQ(message.id(), message_set.idForMessage("BIG_MESSAGE"));
@@ -78,7 +91,7 @@ TEST_CASE("Message set creation") {
     SUBCASE("Have fields truncated by zero-elision") {
         message.set("int64_field", 34); // since largest field, will be at the end of the message
         CHECK_EQ(message.get<int64_t>("int64_field"), 34);
-        auto ret = message.finalize(1, {2,3});
+        auto ret = message.finalize(1, {2, 3});
         CHECK_EQ(message.get<int64_t>("int64_field"), 34);
     }
 
@@ -130,19 +143,19 @@ TEST_CASE("Message set creation") {
 
     SUBCASE("Can set values with initializer list API") {
         message.set({
-            {"uint8_field", 0x12},
-            {"int8_field", 0x12},
-            {"uint16_field", 0x1234},
-            {"int16_field", 0x1234},
-            {"uint32_field", 0x12345678},
-            {"int32_field", 0x12345678},
-            {"uint64_field", 0x1234567890ABCDEF},
-            {"int64_field", 0x1234567890ABCDEF},
-            {"double_field", 0.123456789},
-            {"float_field", 0.123456789},
-            {"char_arr_field", "Hello World!"},
-            {"float_arr_field", std::vector<float>{1.0, 2.0, 3.0}},
-            {"int32_arr_field", std::vector<int32_t>{1, 2, 3}}});
+                            {"uint8_field",     0x12},
+                            {"int8_field",      0x12},
+                            {"uint16_field",    0x1234},
+                            {"int16_field",     0x1234},
+                            {"uint32_field",    0x12345678},
+                            {"int32_field",     0x12345678},
+                            {"uint64_field",    0x1234567890ABCDEF},
+                            {"int64_field",     0x1234567890ABCDEF},
+                            {"double_field",    0.123456789},
+                            {"float_field",     0.123456789},
+                            {"char_arr_field",  "Hello World!"},
+                            {"float_arr_field", std::vector<float>{1.0, 2.0, 3.0}},
+                            {"int32_arr_field", std::vector<int32_t>{1, 2, 3}}});
 
         CHECK_EQ(static_cast<uint8_t>(message["uint8_field"]), 0x12);
         CHECK_EQ(static_cast<int8_t>(message["int8_field"]), 0x12);
@@ -201,6 +214,9 @@ TEST_CASE("Message set creation") {
 
         message["float_field"].floatPack<uint32_t>(0x23456789);
         CHECK_EQ(message["float_field"].floatUnpack<uint32_t>(), 0x23456789);
+
+        CHECK_THROWS_AS(message["float_field"].floatUnpack<std::string>(), std::runtime_error);
+        CHECK_THROWS_AS(message["float_field"].floatUnpack<std::vector<int>>(), std::runtime_error);
     }
 
     SUBCASE("Set and get a single field in array outside of range") {
@@ -258,6 +274,109 @@ TEST_CASE("Message set creation") {
         CHECK_EQ(this_test_message.get<uint8_t>("field4"), 0);
     }
 
+    SUBCASE("Test all array conversions") {
+        auto this_test_message = message_set.create("ARRAY_ONLY_MESSAGE");
+        this_test_message["field1"] = "Hello";
+        this_test_message["field2"] = std::vector<uint8_t>{1, 2, 3};
+        this_test_message["field3"] = std::vector<uint16_t>{4, 5, 6};
+        this_test_message["field4"] = std::vector<uint32_t>{7, 8, 9};
+        this_test_message["field5"] = std::vector<uint64_t>{10, 11, 12};
+        this_test_message["field6"] = std::vector<int8_t>{13, 14, 15};
+        this_test_message["field7"] = std::vector<int16_t>{16, 17, 18};
+        this_test_message["field8"] = std::vector<int32_t>{19, 20, 21};
+        this_test_message["field9"] = std::vector<int64_t>{22, 23, 24};
+        this_test_message["field10"] = std::vector<float>{25, 26, 27};
+        this_test_message["field11"] = std::vector<double>{28, 29, 30};
+
+        CHECK_EQ(this_test_message["field1"].as<std::string>(), "Hello");
+        CHECK_EQ(this_test_message["field2"].as<std::vector<uint8_t>>(), std::vector<uint8_t>{1, 2, 3});
+        CHECK_EQ(this_test_message["field3"].as<std::vector<uint16_t>>(), std::vector<uint16_t>{4, 5, 6});
+        CHECK_EQ(this_test_message["field4"].as<std::vector<uint32_t>>(), std::vector<uint32_t>{7, 8, 9});
+        CHECK_EQ(this_test_message["field5"].as<std::vector<uint64_t>>(), std::vector<uint64_t>{10, 11, 12});
+        CHECK_EQ(this_test_message["field6"].as<std::vector<int8_t>>(), std::vector<int8_t>{13, 14, 15});
+        CHECK_EQ(this_test_message["field7"].as<std::vector<int16_t>>(), std::vector<int16_t>{16, 17, 18});
+        CHECK_EQ(this_test_message["field8"].as<std::vector<int32_t>>(), std::vector<int32_t>{19, 20, 21});
+        CHECK_EQ(this_test_message["field9"].as<std::vector<int64_t>>(), std::vector<int64_t>{22, 23, 24});
+        CHECK_EQ(this_test_message["field10"].as<std::vector<float>>(), std::vector<float>{25, 26, 27});
+        CHECK_EQ(this_test_message["field11"].as<std::vector<double>>(), std::vector<double>{28, 29, 30});
+    }
+
+    SUBCASE("Can get as native type variant") {
+        message.setFromNativeTypeVariant("uint8_field", {static_cast<uint8_t>(1)});
+        message.setFromNativeTypeVariant("int8_field", {static_cast<int8_t>(2)});
+        message.setFromNativeTypeVariant("uint16_field", {static_cast<uint16_t>(3)});
+        message.setFromNativeTypeVariant("int16_field", {static_cast<int16_t>(4)});
+        message.setFromNativeTypeVariant("uint32_field", {static_cast<uint32_t>(5)});
+        message.setFromNativeTypeVariant("int32_field", {static_cast<int32_t>(6)});
+        message.setFromNativeTypeVariant("uint64_field", {static_cast<uint64_t>(7)});
+        message.setFromNativeTypeVariant("int64_field", {static_cast<int64_t>(8)});
+        message.setFromNativeTypeVariant("double_field", {9.0});
+        message.setFromNativeTypeVariant("float_field", {10.0f});
+        message.setFromNativeTypeVariant("char_arr_field", {"Hello World!"});
+        message.setFromNativeTypeVariant("float_arr_field", {std::vector<float>{1.0, 2.0, 3.0}});
+        message.setFromNativeTypeVariant("int32_arr_field", {std::vector<int32_t>{4, 5, 6}});
+        CHECK_EQ(message.get<uint8_t>("uint8_field"), 1);
+        CHECK_EQ(message.get<int8_t>("int8_field"), 2);
+        CHECK_EQ(message.get<uint16_t>("uint16_field"), 3);
+        CHECK_EQ(message.get<int16_t>("int16_field"), 4);
+        CHECK_EQ(message.get<uint32_t>("uint32_field"), 5);
+        CHECK_EQ(message.get<int32_t>("int32_field"), 6);
+        CHECK_EQ(message.get<uint64_t>("uint64_field"), 7);
+        CHECK_EQ(message.get<int64_t>("int64_field"), 8);
+        CHECK_EQ(message.get<double>("double_field"), doctest::Approx(9.0));
+        CHECK_EQ(message.get<float>("float_field"), doctest::Approx(10.0));
+        CHECK_EQ(message.get<std::string>("char_arr_field"), "Hello World!");
+        CHECK_EQ(message.get<std::vector<float>>("float_arr_field"), std::vector<float>{1.0, 2.0, 3.0});
+        CHECK_EQ(message.get<std::vector<int32_t>>("int32_arr_field"), std::vector<int32_t>{4, 5, 6});
+
+
+
+        CHECK(std::holds_alternative<uint8_t>(message.getAsNativeTypeInVariant("uint8_field")));
+        CHECK(std::holds_alternative<int8_t>(message.getAsNativeTypeInVariant("int8_field")));
+        CHECK(std::holds_alternative<uint16_t>(message.getAsNativeTypeInVariant("uint16_field")));
+        CHECK(std::holds_alternative<int16_t>(message.getAsNativeTypeInVariant("int16_field")));
+        CHECK(std::holds_alternative<uint32_t>(message.getAsNativeTypeInVariant("uint32_field")));
+        CHECK(std::holds_alternative<int32_t>(message.getAsNativeTypeInVariant("int32_field")));
+        CHECK(std::holds_alternative<uint64_t>(message.getAsNativeTypeInVariant("uint64_field")));
+        CHECK(std::holds_alternative<int64_t>(message.getAsNativeTypeInVariant("int64_field")));
+        CHECK(std::holds_alternative<double>(message.getAsNativeTypeInVariant("double_field")));
+        CHECK(std::holds_alternative<float>(message.getAsNativeTypeInVariant("float_field")));
+        CHECK(std::holds_alternative<std::string>(message.getAsNativeTypeInVariant("char_arr_field")));
+        CHECK(std::holds_alternative<std::vector<float>>(message.getAsNativeTypeInVariant("float_arr_field")));
+        CHECK(std::holds_alternative<std::vector<int32_t>>(message.getAsNativeTypeInVariant("int32_arr_field")));
+
+
+        auto this_test_message = message_set.create("ARRAY_ONLY_MESSAGE");
+        CHECK(std::holds_alternative<std::string>(this_test_message.getAsNativeTypeInVariant("field1")));
+        CHECK(std::holds_alternative<std::vector<uint8_t>>(this_test_message.getAsNativeTypeInVariant("field2")));
+        CHECK(std::holds_alternative<std::vector<uint16_t>>(this_test_message.getAsNativeTypeInVariant("field3")));
+        CHECK(std::holds_alternative<std::vector<uint32_t>>(this_test_message.getAsNativeTypeInVariant("field4")));
+        CHECK(std::holds_alternative<std::vector<uint64_t>>(this_test_message.getAsNativeTypeInVariant("field5")));
+        CHECK(std::holds_alternative<std::vector<int8_t>>(this_test_message.getAsNativeTypeInVariant("field6")));
+        CHECK(std::holds_alternative<std::vector<int16_t>>(this_test_message.getAsNativeTypeInVariant("field7")));
+        CHECK(std::holds_alternative<std::vector<int32_t>>(this_test_message.getAsNativeTypeInVariant("field8")));
+        CHECK(std::holds_alternative<std::vector<int64_t>>(this_test_message.getAsNativeTypeInVariant("field9")));
+        CHECK(std::holds_alternative<std::vector<float>>(this_test_message.getAsNativeTypeInVariant("field10")));
+        CHECK(std::holds_alternative<std::vector<double>>(this_test_message.getAsNativeTypeInVariant("field11")));
+    }
+
+    SUBCASE("Test toString") {
+        message["uint8_field"] = 1;
+        message["int8_field"] = -2;
+        message["uint16_field"] = 3;
+        message["int16_field"] = -4;
+        message["uint32_field"] = 5;
+        message["int32_field"] = -6;
+        message["uint64_field"] = 7;
+        message["int64_field"] = 8;
+        message["double_field"] = 9.0;
+        message["float_field"] = 10.0;
+        message["char_arr_field"] = "Hello World!";
+        message["float_arr_field"] = std::vector<float>{1.0, 2.0, 3.0};
+        message["int32_arr_field"] = std::vector<int32_t>{4, 5, 6};
+        CHECK_EQ(message.toString(),
+                 "Message ID 9915 (BIG_MESSAGE) \n  char_arr_field: \"Hello World!\"\n  double_field: 9\n  float_arr_field: 1, 2, 3\n  float_field: 10\n  int16_field: -4\n  int32_arr_field: 4, 5, 6\n  int32_field: -6\n  int64_field: 8\n  int8_field: -2\n  uint16_field: 3\n  uint32_field: 5\n  uint64_field: 7\n  uint8_field: 1\n");
+    }
 
 
 }
