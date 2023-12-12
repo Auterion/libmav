@@ -78,14 +78,14 @@ namespace mav {
     };
 
     template <typename T>
-    inline void serialize(const T &v, uint8_t* destination) {
+    inline void serialize(const T &v, uint8_t* destination) noexcept {
         auto src_ptr = static_cast<const uint8_t*>(static_cast<const void*>(&v));
         std::copy(src_ptr, src_ptr + sizeof(T), destination);
     }
 
 
     template <typename T>
-    inline T deserialize(const uint8_t* source, int deserialize_size) {
+    inline T deserialize(const uint8_t* source, int deserialize_size) noexcept {
         // in case we do not have any bytes to read, we return 0
         if (deserialize_size <= 0) {
             return T{0};
