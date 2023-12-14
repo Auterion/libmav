@@ -156,30 +156,24 @@ namespace mav {
 
         uint64_t _computeSignatureHash48(const std::array<uint8_t, MessageDefinition::KEY_SIZE>& key) const {
             // signature = sha256_48(secret_key + header + payload + CRC + link-ID + timestamp)
-            constexpr size_t maxSize = MessageDefinition::KEY_SIZE + MessageDefinition::HEADER_SIZE +
-                                       MessageDefinition::MAX_PAYLOAD_SIZE + MessageDefinition::CHECKSUM_SIZE +
-                                       MessageDefinition::SIGNATURE_LINK_ID_SIZE + MessageDefinition::SIGNATURE_TIMESTAMP_SIZE;
-            std::array<uint8_t, maxSize> data;
-            size_t actualSize = 0;
+            picosha2::hash256_one_by_one hasher;
             // secret_key
-            std::copy_n(key.begin(), MessageDefinition::KEY_SIZE, data.begin() + actualSize);
-            actualSize += MessageDefinition::KEY_SIZE;
+            hasher.process(key.begin(), key.begin() + MessageDefinition::KEY_SIZE);
             // header + payload + CRC
-            const size_t dataSize =
-                MessageDefinition::HEADER_SIZE + header().len() + MessageDefinition::CHECKSUM_SIZE;
-            std::copy_n(_backing_memory.begin(), dataSize, data.begin() + actualSize);
-            actualSize += dataSize;
+            hasher.process(_backing_memory.begin(), _backing_memory.begin() + 
+                    MessageDefinition::HEADER_SIZE + header().len() + MessageDefinition::CHECKSUM_SIZE);
             // link-ID
             const uint8_t linkId = signature().linkId();
-            serialize(linkId, data.begin() + actualSize);
-            actualSize += 1;
+            hasher.process(&linkId, &linkId + MessageDefinition::SIGNATURE_LINK_ID_SIZE);
             // timestamp
             const uint64_t timestamp = signature().timestamp();
-            serialize(timestamp, data.begin() + actualSize);
-            actualSize += MessageDefinition::SIGNATURE_TIMESTAMP_SIZE;
+            std::array<uint8_t, sizeof(timestamp)> timestampSerialized;
+            serialize(timestamp, timestampSerialized.begin());
+            hasher.process(timestampSerialized.begin(), timestampSerialized.begin() + MessageDefinition::SIGNATURE_TIMESTAMP_SIZE);
 
+            hasher.finish();
             std::vector<unsigned char> hash(picosha2::k_digest_size);
-            picosha2::hash256(data.begin(), data.begin() + actualSize, hash.begin(), hash.end());
+            hasher.get_hash_bytes(hash.begin(), hash.end());
             return deserialize<uint64_t>(hash.data(), MessageDefinition::SIGNATURE_SIGNATURE_SIZE);
         }
 
