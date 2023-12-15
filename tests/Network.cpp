@@ -159,6 +159,19 @@ TEST_CASE("Create network runtime") {
         CHECK_EQ(message.name(), "TEST_MESSAGE");
     }
 
+    SUBCASE("Receiver re-synchronizes when garbage data between messages") {
+        interface.reset();
+        auto expectation_1 = connection->expect("TEST_MESSAGE");
+        auto expectation_2 = connection->expect("TEST_MESSAGE");
+        interface.addToReceiveQueue("\xfd\x10\x00\x00\x01\x61\x61\xbc\x26\x00\x2a\x00\x00\x00\x48\x65\x6c\x6c\x6f\x20\x57\x6f\x72\x6c\x64\x21\x53\xd9"s, interface_partner);
+        interface.addToReceiveQueue("this is garbage data"s, interface_partner);
+        interface.addToReceiveQueue("\xfd\x10\x00\x00\x01\x61\x61\xbc\x26\x00\x2a\x00\x00\x00\x48\x65\x6c\x6c\x6f\x20\x57\x6f\x72\x6c\x64\x21\x53\xd9"s, interface_partner);
+        auto message_1 = connection->receive(expectation_1);
+        CHECK_EQ(message_1.name(), "TEST_MESSAGE");
+        auto message_2 = connection->receive(expectation_2);
+        CHECK_EQ(message_2.name(), "TEST_MESSAGE");
+    }
+
     SUBCASE("Can not receive message from wrong partner") {
         interface.reset();
         auto expectation = connection->expect("TEST_MESSAGE");
