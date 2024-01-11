@@ -31,13 +31,18 @@ You can also include the library as a submodule in your project.
 
 ### Running the tests
 
-Libmav uses [doctest](https://github.com/doctest/doctest/).
+Libmav uses [doctest](https://github.com/doctest/doctest/) and [gcovr](https://github.com/gcovr/gcovr/).
 
 To run the tests, build the library, then run the test executable. Test results will be output to console.
 
 ```bash
 mkdir build && cd build && cmake .. && make tests
 ./tests/tests
+```
+
+To test coverage, simple invoke the coverage tool from the root directory.
+```bash
+gcovr
 ```
 
 ## Getting started
