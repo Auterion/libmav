@@ -100,7 +100,7 @@ namespace mav {
     }
 
 
-    inline uint64_t millis() {
+    inline uint64_t millis() noexcept {
         return std::chrono::duration_cast<std::chrono::milliseconds>(
                 std::chrono::system_clock::now().time_since_epoch()).count();
     }
@@ -116,21 +116,23 @@ namespace mav {
         static constexpr formatEndType end{};
         static constexpr formatEndType toString{};
 
+        StringFormat() noexcept = default;
+
         template <typename T>
-        StringFormat& operator<< (const T &value) {
+        StringFormat& operator<< (const T &value) noexcept {
             _stream << value;
             return *this;
         }
 
-        std::string operator<< (const formatEndType&) {
+        std::string operator<< (const formatEndType&) noexcept {
             return _stream.str();
         }
 
-        std::string str() const {
+        std::string str() const noexcept {
             return _stream.str();
         }
 
-        explicit operator std::string() const {
+        explicit operator std::string() const noexcept {
             return _stream.str();
         }
     };
