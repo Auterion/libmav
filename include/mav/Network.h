@@ -405,6 +405,10 @@ namespace mav {
             _heartbeat_message = std::nullopt;
         }
 
+        void injectMessage(Message &message) {
+            _sendMessage(message, {});
+        }
+
         void stop() {
             _interface.close();
             _should_terminate.store(true);
