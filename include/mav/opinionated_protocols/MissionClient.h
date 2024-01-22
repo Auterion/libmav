@@ -78,6 +78,13 @@ namespace mission {
                 // nothing to do
                 return;
             }
+
+            // assert all messages are MISSION_ITEM_INT
+            for (const auto& message : mission_messages) {
+                throwAssert(message.id() == _message_set.idForMessage("MISSION_ITEM_INT"),
+                            "Mission upload only supports MISSION_ITEM_INT messages");
+            }
+
             // get mission type from first message
             int mission_type = mission_messages[0]["mission_type"];
 
@@ -93,6 +100,8 @@ namespace mission {
                                                               target.system_id, target.component_id,
                                                               retry_count, item_timeout);
             _assertNotNack(count_response);
+            // also an ack is always bad here, as we have at least one item to upload
+            throwAssert(count_response.id() == _message_set.idForMessage("MISSION_REQUEST_INT"), "Unexpected message");
             throwAssert(count_response["mission_type"].as<int>() == mission_type, "Mission type mismatch");
             throwAssert(count_response["seq"].as<int>() == 0, "Sequence number mismatch");
 
@@ -109,12 +118,15 @@ namespace mission {
                 // NACK is always bad, throw if we receive NACK
                 _assertNotNack(item_response);
 
-                if (seq == static_cast<int>(mission_messages.size()) - 1) {
+                if (item_response.id() == _message_set.idForMessage("MISSION_ACK")) {
                     // we're okay with an ack, only when we're at the last message
-                    if (item_response.id() == _message_set.idForMessage("MISSION_ACK")) {
+                    if (seq == static_cast<int>(mission_messages.size()) - 1) {
                         break;
+                    } else {
+                        throw mav::ProtocolException("Received preliminary ACK from server.");
                     }
                 }
+
                 // in general, we need a mission request int
                 throwAssert(item_response.id() == _message_set.idForMessage("MISSION_REQUEST_INT"), "Unexpected message");
                 // we expect a request for the next message
