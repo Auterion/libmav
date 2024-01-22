@@ -405,7 +405,7 @@ namespace mav {
             _heartbeat_message = std::nullopt;
         }
 
-        void sendMessage(Message &message) {
+        void injectMessage(Message &message) {
             _sendMessage(message, {});
         }
 
