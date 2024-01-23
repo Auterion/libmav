@@ -116,7 +116,9 @@ namespace mav {
         static constexpr formatEndType end{};
         static constexpr formatEndType toString{};
 
+#if __GNUC__ > 9
         StringFormat() noexcept = default;
+#endif
 
         template <typename T>
         StringFormat& operator<< (const T &value) noexcept {
