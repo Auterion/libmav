@@ -378,13 +378,17 @@ TEST_CASE("Message set creation") {
                  "Message ID 9915 (BIG_MESSAGE) \n  char_arr_field: \"Hello World!\"\n  double_field: 9\n  float_arr_field: 1, 2, 3\n  float_field: 10\n  int16_field: -4\n  int32_arr_field: 4, 5, 6\n  int32_field: -6\n  int64_field: 8\n  int8_field: -2\n  uint16_field: 3\n  uint32_field: 5\n  uint64_field: 7\n  uint8_field: 1\n");
     }
 
-
     SUBCASE("Sign a packet") {
 
         std::array<uint8_t, 32> key;
         for (int i = 0 ; i < 32; i++) key[i] = i;
 
         uint64_t timestamp = 770479200;
+
+        // Attempt to access signature before signed (const & non-const versions)
+        const auto const_message = message_set.create("UINT8_ONLY_MESSAGE");
+        CHECK_THROWS_AS(message.signature(), std::runtime_error);
+        CHECK_THROWS_AS(const_message.signature(), std::runtime_error);
 
         uint32_t wire_size = message.finalize(5, {6, 7}, key, timestamp);
 
