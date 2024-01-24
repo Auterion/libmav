@@ -179,6 +179,10 @@ namespace mav {
             return _backing_memory[2];
         }
 
+        [[nodiscard]] inline bool isSigned() const {
+            return incompatFlags() & 0x01;
+        }
+
         inline uint8_t& compatFlags() {
             return _backing_memory[3];
         }
@@ -221,6 +225,61 @@ namespace mav {
 
         [[nodiscard]] inline Identifier source() const {
             return {systemId(), componentId()};
+        }
+    };
+
+    template <typename BackingMemoryPointerType>
+    class Signature {
+      private:
+        BackingMemoryPointerType _backing_memory;
+
+        // Both timestamp and signature use 6-byte fields
+        class _SignatureField {
+          private:
+            BackingMemoryPointerType _ptr;
+          public:
+            explicit _SignatureField(BackingMemoryPointerType ptr) : _ptr(ptr) {}
+
+            operator uint64_t() const {
+                return static_cast<uint64_t>((*static_cast<const uint64_t*>(static_cast<const void*>(_ptr))) & 0xFFFFFFFFFFFF);
+            }
+
+            _SignatureField& operator=(uint64_t v) {
+                _ptr[0] = static_cast<uint8_t>(v & 0xFF);
+                _ptr[1] = static_cast<uint8_t>((v >> 8) & 0xFF);
+                _ptr[2] = static_cast<uint8_t>((v >> 16) & 0xFF);
+                _ptr[3] = static_cast<uint8_t>((v >> 24) & 0xFF);
+                _ptr[4] = static_cast<uint8_t>((v >> 32) & 0xFF);
+                _ptr[5] = static_cast<uint8_t>((v >> 40) & 0xFF);
+                return *this;
+            }
+        };
+
+      public:
+        explicit Signature(BackingMemoryPointerType backing_memory) : _backing_memory(backing_memory) {}
+
+        inline uint8_t& linkId(){
+            return _backing_memory[0];
+        }
+
+        [[nodiscard]] inline uint8_t linkId() const {
+            return _backing_memory[0];
+        }
+
+        inline _SignatureField timestamp() {
+            return _SignatureField(_backing_memory + 1);
+        }
+
+        [[nodiscard]] inline const _SignatureField timestamp() const {
+            return _SignatureField(_backing_memory + 1);
+        }
+
+        inline _SignatureField signature() {
+            return _SignatureField(_backing_memory + 7);
+        }
+
+        [[nodiscard]] inline const _SignatureField signature() const {
+            return _SignatureField(_backing_memory + 7);
         }
     };
 
@@ -308,8 +367,12 @@ namespace mav {
         static constexpr int MAX_PAYLOAD_SIZE = 255;
         static constexpr int HEADER_SIZE = 10;
         static constexpr int CHECKSUM_SIZE = 2;
-        static constexpr int SIGNATURE_SIZE = 13;
+        static constexpr int SIGNATURE_LINK_ID_SIZE = 1;
+        static constexpr int SIGNATURE_TIMESTAMP_SIZE = 6;
+        static constexpr int SIGNATURE_SIGNATURE_SIZE = 6;
+        static constexpr int SIGNATURE_SIZE = SIGNATURE_LINK_ID_SIZE + SIGNATURE_TIMESTAMP_SIZE + SIGNATURE_SIGNATURE_SIZE;
         static constexpr int MAX_MESSAGE_SIZE = MAX_PAYLOAD_SIZE + HEADER_SIZE + CHECKSUM_SIZE + SIGNATURE_SIZE;
+        static constexpr int KEY_SIZE = 32;
 
         [[nodiscard]] inline const std::string& name() const {
             return _name;

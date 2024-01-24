@@ -41,6 +41,7 @@
 #include <variant>
 #include "MessageDefinition.h"
 #include "utils.h"
+#include "picosha2/picosha2.h"
 
 namespace mav {
 
@@ -153,6 +154,29 @@ namespace mav {
             throw std::runtime_error("Unknown base type"); // should never happen
         }
 
+        uint64_t _computeSignatureHash48(const std::array<uint8_t, MessageDefinition::KEY_SIZE>& key) const {
+            // signature = sha256_48(secret_key + header + payload + CRC + link-ID + timestamp)
+            picosha2::hash256_one_by_one hasher;
+            // secret_key
+            hasher.process(key.begin(), key.begin() + MessageDefinition::KEY_SIZE);
+            // header + payload + CRC
+            hasher.process(_backing_memory.begin(), _backing_memory.begin() + 
+                    MessageDefinition::HEADER_SIZE + header().len() + MessageDefinition::CHECKSUM_SIZE);
+            // link-ID
+            const uint8_t linkId = signature().linkId();
+            hasher.process(&linkId, &linkId + MessageDefinition::SIGNATURE_LINK_ID_SIZE);
+            // timestamp
+            const uint64_t timestamp = signature().timestamp();
+            std::array<uint8_t, sizeof(timestamp)> timestampSerialized;
+            serialize(timestamp, timestampSerialized.begin());
+            hasher.process(timestampSerialized.begin(), timestampSerialized.begin() + MessageDefinition::SIGNATURE_TIMESTAMP_SIZE);
+
+            hasher.finish();
+            std::vector<unsigned char> hash(picosha2::k_digest_size);
+            hasher.get_hash_bytes(hash.begin(), hash.end());
+            return deserialize<uint64_t>(hash.data(), MessageDefinition::SIGNATURE_SIGNATURE_SIZE);
+        }
+
     public:
 
         static inline Message _instantiateFromMemory(const MessageDefinition &definition, ConnectionPartner source_partner,
@@ -220,6 +244,20 @@ namespace mav {
 
         [[nodiscard]] Header<uint8_t*> header() {
             return Header<uint8_t*>(_backing_memory.data());
+        }
+
+        [[nodiscard]] const Signature<const uint8_t*> signature() const {
+            if (!isFinalized()) {
+                throw std::runtime_error("Unable to parse unfinalized message.");
+            }
+            return Signature<const uint8_t*>(&_backing_memory[MessageDefinition::HEADER_SIZE + header().len() + MessageDefinition::CHECKSUM_SIZE]);
+        }
+
+        [[nodiscard]] Signature<uint8_t*> signature() {
+            if (!isFinalized()) {
+                throw std::runtime_error("Unable to parse unfinalized message.");
+            }
+            return Signature<uint8_t*>(&_backing_memory[MessageDefinition::HEADER_SIZE + header().len() + MessageDefinition::CHECKSUM_SIZE]);
         }
 
         [[nodiscard]] const ConnectionPartner& source() const {
@@ -440,11 +478,23 @@ namespace mav {
             return ss.str();
         }
 
+        [[nodiscard]] bool validate(const std::array<uint8_t, MessageDefinition::KEY_SIZE>& key) const {
+            return signature().signature() == _computeSignatureHash48(key);
+        }
+
         [[nodiscard]] uint32_t finalize(uint8_t seq, const Identifier &sender) {
+            static const std::array<uint8_t, MessageDefinition::KEY_SIZE> null_key = {};
+            return finalize(seq, sender, null_key, 0, 0);
+        }
+
+        [[nodiscard]] uint32_t finalize(uint8_t seq, const Identifier &sender,
+                                        const std::array<uint8_t, MessageDefinition::KEY_SIZE>& key,
+                                        const uint64_t& timestamp, const uint8_t linkId = 0) {
             if (isFinalized()) {
                 _unFinalize();
             }
 
+            bool sign = (timestamp > 0);
             auto last_nonzero = std::find_if(_backing_memory.rend() -
                     MessageDefinition::HEADER_SIZE - _message_definition->maxPayloadSize(),
                     _backing_memory.rend(), [](const auto &v) {
@@ -457,7 +507,7 @@ namespace mav {
 
             header().magic() = 0xFD;
             header().len() = static_cast<uint8_t>(payload_size);
-            header().incompatFlags() = 0;
+            header().incompatFlags() = sign ? 0x01 : 0x00;
             header().compatFlags() = 0;
             header().seq() = seq;
             if (header().systemId() == 0) {
@@ -475,7 +525,15 @@ namespace mav {
             _crc_offset = MessageDefinition::HEADER_SIZE + payload_size;
             serialize(crc.crc16(), _backing_memory.data() + _crc_offset);
 
-            return MessageDefinition::HEADER_SIZE + payload_size + MessageDefinition::CHECKSUM_SIZE;
+            int signature_size = 0;
+            if (sign) {
+                signature().linkId() = linkId;
+                signature().timestamp() = timestamp;
+                signature().signature() = _computeSignatureHash48(key);
+                signature_size = MessageDefinition::SIGNATURE_SIZE;
+            }
+
+            return MessageDefinition::HEADER_SIZE + payload_size + MessageDefinition::CHECKSUM_SIZE + signature_size;
         }
 
         [[nodiscard]] const uint8_t* data() const {
