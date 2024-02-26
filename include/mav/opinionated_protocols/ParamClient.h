@@ -67,6 +67,7 @@ namespace param {
         mav::Message readRaw(mav::Message &message, int target_system = mav::ANY_ID, int target_component = mav::ANY_ID, int retry_count=3, int item_timeout=1000) {
             throwAssert(message.name() == "PARAM_REQUEST_READ", "Message must be of type PARAM_REQUEST_READ");
             auto response = exchangeRetry(_connection, message, "PARAM_VALUE", target_system, target_component, retry_count, item_timeout);
+            throwAssert(response["param_id"].as<std::string>() == message["param_id"].as<std::string>(), "Parameter ID mismatch");
             return response;
         }
 
@@ -84,7 +85,9 @@ namespace param {
             throwAssert(message.name() == "PARAM_SET", "Message must be of type PARAM_SET");
             auto response = exchangeRetry(_connection, message, "PARAM_VALUE", target_system, target_component, retry_count, item_timeout);
             throwAssert(response["param_id"].as<std::string>() == message["param_id"].as<std::string>(), "Parameter ID mismatch");
-            throwAssert(response["param_type"].as<float>() == message["param_type"].as<float>(), "Parameter type mismatch");
+            throwAssert(response["param_type"].as<int>() == message["param_type"].as<int>(), "Parameter type mismatch");
+            // compare as floats, as that's the native type for both types
+            throwAssert(response["param_value"].as<float>() == message["param_value"].as<float>(), "Parameter value mismatch. Setting param failed.");
             return response;
         }
 
