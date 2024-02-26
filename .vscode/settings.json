@@ -66,6 +66,10 @@
         "thread": "cpp",
         "cinttypes": "cpp",
         "typeinfo": "cpp",
-        "variant": "cpp"
+        "variant": "cpp",
+        "bitset": "cpp",
+        "any": "cpp",
+        "forward_list": "cpp",
+        "typeindex": "cpp"
     }
 }
