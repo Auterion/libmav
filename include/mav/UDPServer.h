@@ -76,6 +76,16 @@ namespace mav {
             }
         }
 
+        void joinMulticastGroup(const std::string& multicast_group, const std::string& local_address="") const {
+            struct ip_mreq mreq{};
+            mreq.imr_multiaddr.s_addr = inet_addr(multicast_group.c_str());
+            mreq.imr_interface.s_addr = local_address.empty() ? INADDR_ANY : inet_addr(local_address.c_str());
+            if (setsockopt(_socket, IPPROTO_IP, IP_ADD_MEMBERSHIP, &mreq, sizeof(mreq)) < 0) {
+                ::close(_socket);
+                throw NetworkError("Could not join multicast group", errno);
+            }
+        }
+
         void stop() const {
             _should_terminate.store(true);
             if (_socket >= 0) {
