@@ -111,7 +111,7 @@ namespace mav {
                 return func(args...);
             } catch (const TimeoutException& e) {
                 if (i == retries - 1) {
-                    throw e;
+                    throw;
                 }
             }
         }
