@@ -272,6 +272,10 @@ TEST_CASE("Create network runtime") {
             auto expectation = connection->expect("TEST_MESSAGE");
             CHECK_THROWS_AS(auto message = connection->receive(expectation, 100), TimeoutException);
         }
+        // send a heartbeat. Any message will clear expired expectations
+        interface.addToReceiveQueue("\xfd\x09\x00\x00\x00\xfd\x01\x00\x00\x00\x04\x00\x00\x00\x01\x02\x03\x05\x06\x77\x53"s, interface_partner);
+        // wait for the heartbeat to be received, to make sure timing is correct in test
+        connection->receive("HEARTBEAT");
         CHECK_EQ(connection->callbackCount(), 0);
     }
 }
