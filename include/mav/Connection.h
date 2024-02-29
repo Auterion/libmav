@@ -108,7 +108,7 @@ namespace mav {
             return _partner;
         }
 
-        void consumeMessageFromNetwork(const Message& message) {
+        void consumeMessageFromNetwork(const Message& message) noexcept {
             // in case we received a heartbeat, update last heartbeat time, to keep the connection alive.
             _last_received_ms = millis();
 
@@ -144,7 +144,7 @@ namespace mav {
             }
         }
 
-        void consumeNetworkExceptionFromNetwork(const std::exception_ptr& exception) {
+        void consumeNetworkExceptionFromNetwork(const std::exception_ptr& exception) noexcept {
             _underlying_network_fault = true;
             std::scoped_lock<std::mutex> lock(_message_callback_mtx);
             auto it = _message_callbacks.begin();
