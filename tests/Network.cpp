@@ -265,4 +265,13 @@ TEST_CASE("Create network runtime") {
                 interface_partner));
         CHECK(found);
     }
+
+    SUBCASE("Callbacks are cleaned up on receive timeout") {
+        interface.reset();
+        for (int i = 0; i < 10; i++) {
+            auto expectation = connection->expect("TEST_MESSAGE");
+            CHECK_THROWS_AS(auto message = connection->receive(expectation, 100), TimeoutException);
+        }
+        CHECK_EQ(connection->callbackCount(), 0);
+    }
 }

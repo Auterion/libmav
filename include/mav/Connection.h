@@ -88,6 +88,11 @@ namespace mav {
 
     public:
 
+        size_t callbackCount() {
+            std::scoped_lock<std::mutex> lock(_message_callback_mtx);
+            return _message_callbacks.size();
+        }
+
         void removeAllCallbacks() {
             std::scoped_lock<std::mutex> lock(_message_callback_mtx);
             _message_callbacks.clear();
