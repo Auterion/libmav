@@ -55,6 +55,7 @@ namespace mav {
         using Expectation = std::shared_ptr<std::promise<Message>>;
 
     private:
+        using ExpectationWeakRef = std::weak_ptr<std::promise<Message>>;
 
         struct FunctionCallback {
             std::function<void(const Message &message)> callback;
@@ -62,7 +63,7 @@ namespace mav {
         };
 
         struct PromiseCallback {
-            Expectation promise;
+            ExpectationWeakRef promise;
             std::function<bool(const Message &message)> selector;
         };
 
@@ -88,6 +89,11 @@ namespace mav {
 
     public:
 
+        size_t callbackCount() {
+            std::scoped_lock<std::mutex> lock(_message_callback_mtx);
+            return _message_callbacks.size();
+        }
+
         void removeAllCallbacks() {
             std::scoped_lock<std::mutex> lock(_message_callback_mtx);
             _message_callbacks.clear();
@@ -102,7 +108,7 @@ namespace mav {
             return _partner;
         }
 
-        void consumeMessageFromNetwork(const Message& message) {
+        void consumeMessageFromNetwork(const Message& message) noexcept {
             // in case we received a heartbeat, update last heartbeat time, to keep the connection alive.
             _last_received_ms = millis();
 
@@ -121,11 +127,16 @@ namespace mav {
                             }
                             it++;
                         } else if constexpr (std::is_same_v<T, PromiseCallback>) {
-                            if (arg.selector(message)) {
-                                arg.promise->set_value(message);
+                            auto promise = arg.promise.lock();
+                            if (!promise) {
                                 it = _message_callbacks.erase(it);
                             } else {
-                                it++;
+                                if (arg.selector(message)) {
+                                    promise->set_value(message);
+                                    it = _message_callbacks.erase(it);
+                                } else {
+                                    it++;
+                                }
                             }
                         }
                     }, callback);
@@ -133,7 +144,7 @@ namespace mav {
             }
         }
 
-        void consumeNetworkExceptionFromNetwork(const std::exception_ptr& exception) {
+        void consumeNetworkExceptionFromNetwork(const std::exception_ptr& exception) noexcept {
             _underlying_network_fault = true;
             std::scoped_lock<std::mutex> lock(_message_callback_mtx);
             auto it = _message_callbacks.begin();
@@ -147,8 +158,13 @@ namespace mav {
                         }
                         it++;
                     } else if constexpr (std::is_same_v<T, PromiseCallback>) {
-                        arg.promise->set_exception(exception);
-                        it = _message_callbacks.erase(it);
+                        auto promise = arg.promise.lock();
+                        if (!promise) {
+                            it = _message_callbacks.erase(it);
+                        } else {
+                            promise->set_exception(exception);
+                            it = _message_callbacks.erase(it);
+                        }
                     }
                 }, callback);
             }

@@ -199,11 +199,24 @@ TEST_CASE("Create network runtime") {
         CHECK_THROWS_AS(auto message = connection->receive(expectation, 100), TimeoutException);
     }
 
-    SUBCASE("Receive throws a NetworkError if the interface fails") {
+    SUBCASE("Receive throws a NetworkError if the interface fails, error callback gets called") {
         interface.reset();
+
+        // add a callback using the callback API. The error should then call the error callback
+        auto error_callback_called_promise = std::promise<void>();
+        connection->addMessageCallback([](const Message &message) {
+           // do nothing
+        }, [&error_callback_called_promise](const std::exception_ptr& exception) {
+            error_callback_called_promise.set_value();
+            CHECK_THROWS_AS(std::rethrow_exception(exception), NetworkError);
+        });
+
         auto expectation = connection->expect("TEST_MESSAGE");
         interface.makeFailOnNextReceive();
+        // Receive on the sync api. The receive should then throw an exception
         CHECK_THROWS_AS(auto message = connection->receive(expectation), NetworkError);
+        CHECK((error_callback_called_promise.get_future().wait_for(std::chrono::seconds(2)) != std::future_status::timeout));
+        connection->removeAllCallbacks();
     }
 
     SUBCASE("Connection recycled on recover after fail") {
@@ -264,5 +277,34 @@ TEST_CASE("Create network runtime") {
                 "\xfd\x10\x00\x00\x00\xfd\x01\xbc\x26\x00\x2a\x00\x00\x00\x48\x65\x6c\x6c\x6f\x20\x57\x6f\x72\x6c\x64\x21\x86\x37"s,
                 interface_partner));
         CHECK(found);
+    }
+
+    SUBCASE("Correct callback called when message is received") {
+        interface.reset();
+        std::promise<void> callback_called_promise;
+        auto callback_called_future = callback_called_promise.get_future();
+
+        connection->addMessageCallback([&callback_called_promise](const Message &message) {
+            if (message.name() == "TEST_MESSAGE") {
+                callback_called_promise.set_value();
+            }
+        });
+
+        interface.addToReceiveQueue("\xfd\x10\x00\x00\x01\x61\x61\xbc\x26\x00\x2a\x00\x00\x00\x48\x65\x6c\x6c\x6f\x20\x57\x6f\x72\x6c\x64\x21\x53\xd9"s, interface_partner);
+        CHECK((callback_called_future.wait_for(std::chrono::seconds(2)) != std::future_status::timeout));
+        connection->removeAllCallbacks();
+    }
+
+    SUBCASE("Callbacks are cleaned up on receive timeout") {
+        interface.reset();
+        for (int i = 0; i < 10; i++) {
+            auto expectation = connection->expect("TEST_MESSAGE");
+            CHECK_THROWS_AS(auto message = connection->receive(expectation, 100), TimeoutException);
+        }
+        // send a heartbeat. Any message will clear expired expectations
+        interface.addToReceiveQueue("\xfd\x09\x00\x00\x00\xfd\x01\x00\x00\x00\x04\x00\x00\x00\x01\x02\x03\x05\x06\x77\x53"s, interface_partner);
+        // wait for the heartbeat to be received, to make sure timing is correct in test
+        connection->receive("HEARTBEAT");
+        CHECK_EQ(connection->callbackCount(), 0);
     }
 }
