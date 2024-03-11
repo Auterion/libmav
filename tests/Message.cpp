@@ -91,7 +91,7 @@ TEST_CASE("Message set creation") {
     SUBCASE("Have fields truncated by zero-elision") {
         message.set("int64_field", 34); // since largest field, will be at the end of the message
         CHECK_EQ(message.get<int64_t>("int64_field"), 34);
-        auto ret = message.finalize(1, {2, 3});
+        (void)message.finalize(1, {2, 3});
         CHECK_EQ(message.get<int64_t>("int64_field"), 34);
     }
 
@@ -247,7 +247,7 @@ TEST_CASE("Message set creation") {
         message.set("float_arr_field", std::vector<float>{0.0, 0.0, 0.0});
         message.set("int32_arr_field", std::vector<int32_t>{0, 0, 0});
 
-        int wire_size = message.finalize(5, {6, 7});
+        (void)message.finalize(5, {6, 7});
         CHECK_EQ(message.get<std::string>("char_arr_field"), "Hello World!");
 
         // check that it stays correct even after modifying the fields
@@ -387,8 +387,8 @@ TEST_CASE("Message set creation") {
 
         // Attempt to access signature before signed (const & non-const versions)
         const auto const_message = message_set.create("UINT8_ONLY_MESSAGE");
-        CHECK_THROWS_AS(message.signature(), std::runtime_error);
-        CHECK_THROWS_AS(const_message.signature(), std::runtime_error);
+        CHECK_THROWS_AS((void)message.signature(), std::runtime_error);
+        CHECK_THROWS_AS((void)const_message.signature(), std::runtime_error);
 
         uint32_t wire_size = message.finalize(5, {6, 7}, key, timestamp);
 

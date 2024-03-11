@@ -182,21 +182,21 @@ TEST_CASE("Create network runtime") {
         interface.reset();
         auto expectation = connection->expect("TEST_MESSAGE");
         interface.addToReceiveQueue("\xfd\x10\x00\x00\x01\x61\x61\xbc\x26\x00\x2a\x00\x00\x00\x48\x65\x6c\x6c\x6f\x20\x57\x6f\x72\x6c\x64\x21\x53\xd9"s, interface_wrong_partner);
-        CHECK_THROWS_AS(auto message = connection->receive(expectation, 100), TimeoutException);
+        CHECK_THROWS_AS((void)connection->receive(expectation, 100), TimeoutException);
     }
 
     SUBCASE("Can not receive message with CRC error") {
         interface.reset();
         auto expectation = connection->expect("TEST_MESSAGE");
         interface.addToReceiveQueue("\xfd\x10\x00\x00\x01\x61\x61\xbc\x26\x00\x2a\x00\x00\x00\x48\x65\x6c\x6c\x6f\x20\x57\x6f\x72\x6c\x64\x21\x53\xda"s, interface_partner);
-        CHECK_THROWS_AS(auto message = connection->receive(expectation, 100), TimeoutException);
+        CHECK_THROWS_AS((void)connection->receive(expectation, 100), TimeoutException);
     }
 
     SUBCASE("Can not receive message with unknown message ID") {
         interface.reset();
         auto expectation = connection->expect(9912);
         interface.addToReceiveQueue("\xfd\x04\x00\x00\x00\x01\x01\xb8\x26\x00\xcd\xcc\x54\x41\x59\x8e"s, interface_partner);
-        CHECK_THROWS_AS(auto message = connection->receive(expectation, 100), TimeoutException);
+        CHECK_THROWS_AS((void)connection->receive(expectation, 100), TimeoutException);
     }
 
     SUBCASE("Receive throws a NetworkError if the interface fails, error callback gets called") {
@@ -206,6 +206,7 @@ TEST_CASE("Create network runtime") {
         auto error_callback_called_promise = std::promise<void>();
         connection->addMessageCallback([](const Message &message) {
            // do nothing
+           (void)message;
         }, [&error_callback_called_promise](const std::exception_ptr& exception) {
             error_callback_called_promise.set_value();
             CHECK_THROWS_AS(std::rethrow_exception(exception), NetworkError);
@@ -214,7 +215,7 @@ TEST_CASE("Create network runtime") {
         auto expectation = connection->expect("TEST_MESSAGE");
         interface.makeFailOnNextReceive();
         // Receive on the sync api. The receive should then throw an exception
-        CHECK_THROWS_AS(auto message = connection->receive(expectation), NetworkError);
+        CHECK_THROWS_AS((void)connection->receive(expectation), NetworkError);
         CHECK((error_callback_called_promise.get_future().wait_for(std::chrono::seconds(2)) != std::future_status::timeout));
         connection->removeAllCallbacks();
     }
@@ -223,7 +224,7 @@ TEST_CASE("Create network runtime") {
         interface.reset();
         auto expectation = connection->expect("HEARTBEAT");
         interface.makeFailOnNextReceive();
-        CHECK_THROWS_AS(auto message = connection->receive(expectation), NetworkError);
+        CHECK_THROWS_AS((void)connection->receive(expectation), NetworkError);
         CHECK_FALSE(connection->alive());
         interface.reset();
         expectation = connection->expect("HEARTBEAT");
@@ -299,7 +300,7 @@ TEST_CASE("Create network runtime") {
         interface.reset();
         for (int i = 0; i < 10; i++) {
             auto expectation = connection->expect("TEST_MESSAGE");
-            CHECK_THROWS_AS(auto message = connection->receive(expectation, 100), TimeoutException);
+            CHECK_THROWS_AS((void)connection->receive(expectation, 100), TimeoutException);
         }
         // send a heartbeat. Any message will clear expired expectations
         interface.addToReceiveQueue("\xfd\x09\x00\x00\x00\xfd\x01\x00\x00\x00\x04\x00\x00\x00\x01\x02\x03\x05\x06\x77\x53"s, interface_partner);

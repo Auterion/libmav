@@ -272,7 +272,7 @@ namespace mav {
         }
     };
 
-};
+}
 
 
 #endif //MAV_CONNECTION_H
