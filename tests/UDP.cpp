@@ -140,6 +140,7 @@ TEST_CASE("UDP server client") {
         std::promise<void> connection_called_promise;
         auto connection_called_future = connection_called_promise.get_future();
         server_runtime.onConnection([&connection_called_promise](const std::shared_ptr<mav::Connection> &connection) {
+            (void)connection;
             connection_called_promise.set_value();
         });
 
@@ -163,6 +164,7 @@ TEST_CASE("UDP server client") {
         std::promise<void> connection_dropped_promise;
         auto connection_dropped_future = connection_dropped_promise.get_future();
         client_runtime.onConnectionLost([&connection_dropped_promise](const std::shared_ptr<mav::Connection> &connection) {
+            (void)connection;
             connection_dropped_promise.set_value();
         });
 
@@ -200,6 +202,7 @@ TEST_CASE("UDP server client") {
         std::promise<void> connection_called_promise;
         auto connection_called_future = connection_called_promise.get_future();
         server_runtime.onConnection([&connection_called_promise](const std::shared_ptr<mav::Connection> &connection) {
+            (void)connection;
             connection_called_promise.set_value();
         });
 
@@ -229,6 +232,7 @@ TEST_CASE("UDP server client") {
             std::promise<void> connection_dropped_promise;
             auto connection_dropped_future = connection_dropped_promise.get_future();
             client_runtime.onConnectionLost([&connection_dropped_promise](const std::shared_ptr<mav::Connection> &connection) {
+                (void)connection;
                 connection_dropped_promise.set_value();
             });
 

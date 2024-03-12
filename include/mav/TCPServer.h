@@ -163,7 +163,7 @@ namespace mav {
         }
 
         ConnectionPartner receive(uint8_t *destination, uint32_t size) override {
-            int bytes_received = 0;
+            uint32_t bytes_received = 0;
 
             while (bytes_received < size) {
 
@@ -188,7 +188,7 @@ namespace mav {
                     ConnectionPartner partner_to_read_from;
 
                     // iterate through the activity
-                    for (int i = 0; i < _poll_fds.size(); i++) {
+                    for (size_t i = 0; i < _poll_fds.size(); i++) {
                         if (_poll_fds[i].revents == 0) {
                             continue;
                         }

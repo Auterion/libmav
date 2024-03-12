@@ -102,7 +102,7 @@ TEST_CASE("TCP server client") {
                                                                   {"mavlink_version", 6}});
 
             std::promise<std::shared_ptr<mav::Connection>> connection2_promise;
-            server_runtime.onConnection([&heartbeat2, &connection2_promise](const std::shared_ptr<mav::Connection> &connection) {
+            server_runtime.onConnection([&connection2_promise](const std::shared_ptr<mav::Connection> &connection) {
                 connection2_promise.set_value(connection);
             });
 

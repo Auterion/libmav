@@ -289,10 +289,12 @@ namespace mav {
             auto field = _message_definition->fieldForName(field_key);
 
             if constexpr(is_string<T>::value) {
+                (void)array_index; // unused
                 setFromString(field_key, v);
             }
 
             else if constexpr(is_iterable<T>::value) {
+                (void)array_index; // unused
                 auto begin = std::begin(v);
                 auto end = std::end(v);
                 if ((end - begin) > field.type.size) {
@@ -387,8 +389,10 @@ namespace mav {
         template <typename T>
         [[nodiscard]] T getAsFloatUnpack(const std::string &field_key, int array_index = 0) const {
             if constexpr(is_string<T>::value) {
+                (void)array_index; // unused
                 throw std::runtime_error("Cannot do float unpack to a string");
             } else if constexpr(is_iterable<T>::value) {
+                (void)array_index; // unused
                 throw std::runtime_error("Cannot do float unpack to an iterable");
             } else {
                 return floatUnpack<T>(get<float>(field_key, array_index));
