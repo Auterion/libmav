@@ -35,6 +35,19 @@ TEST_CASE("Message set creation") {
         CHECK_THROWS_AS(message_set.addFromXMLString("<mavlink>"), mav::ParseError);
     }
 
+    SUBCASE("Can not add message with unknown field type") {
+        CHECK_THROWS_AS(message_set.addFromXMLString(R""""(
+<mavlink>
+    <messages>
+        <message id="15321" name="ONLY_MESSAGE">
+            <field type="unknown" name="field">Field</field>
+        </message>
+    </messages>
+</mavlink>
+)""""), mav::ParseError);
+
+    }
+
     SUBCASE("Can add valid, partial XML") {
         // This is a valid XML file, but it does not contain any messages or enums
         message_set.addFromXMLString("<mavlink></mavlink>");
@@ -158,10 +171,10 @@ TEST_CASE("Enum value encoding") {
             <entry value="2**4" name="BIT4" />
             <entry value="0b000100000000" name="BIT8" />
             <entry value="0x10000" name="BIT16" />
-            <entry value="0b1000000000000000000000000000000000000000000000000000000000000" name="BIT60" />
+            <entry value="0B1000000000000000000000000000000000000000000000000000000000000" name="BIT60" />
             <entry value="2305843009213693952" name="BIT61" />
             <entry value="2**62" name="BIT62" />
-            <entry value="0x8000000000000000" name="BIT63" />
+            <entry value="0X8000000000000000" name="BIT63" />
         </enum>
     </enums>
 </mavlink>
@@ -194,7 +207,7 @@ TEST_CASE("Enum value encoding") {
         CHECK_THROWS_AS(message_set.addFromXMLString(empty_value), mav::ParseError);
     }
 
-    SUBCASE("Enum with invalid value") {
+    SUBCASE("Enum with invalid value 1") {
         std::string invalid_value = R""""(
 <mavlink>
     <enums>
@@ -209,6 +222,35 @@ TEST_CASE("Enum value encoding") {
         CHECK_THROWS_AS(message_set.addFromXMLString(invalid_value), mav::ParseError);
     }
 
+    SUBCASE("Enum with invalid value 2") {
+        std::string invalid_value = R""""(
+<mavlink>
+    <enums>
+        <enum name="MY_ENUM_INVALID_VALUE">
+            <entry value="thisiswrong" name="INVALID" />
+        </enum>
+    </enums>
+</mavlink>
+)"""";
+
+        MessageSet message_set;
+        CHECK_THROWS_AS(message_set.addFromXMLString(invalid_value), mav::ParseError);
+    }
+
+    SUBCASE("Enum with invalid value 3") {
+        std::string invalid_value = R""""(
+<mavlink>
+    <enums>
+        <enum name="MY_ENUM_INVALID_VALUE">
+            <entry value="128thereismorecontent" name="INVALID" />
+        </enum>
+    </enums>
+</mavlink>
+)"""";
+
+        MessageSet message_set;
+        CHECK_THROWS_AS(message_set.addFromXMLString(invalid_value), mav::ParseError);
+    }
 
     SUBCASE("Enum with overflow value") {
         std::string invalid_value = R""""(
@@ -225,8 +267,20 @@ TEST_CASE("Enum value encoding") {
         CHECK_THROWS_AS(message_set.addFromXMLString(invalid_value), mav::ParseError);
     }
 
+    SUBCASE("Enum with non-base-2 exponential value") {
+        std::string invalid_value = R""""(
+<mavlink>
+    <enums>
+        <enum name="MY_ENUM_INVALID_VALUE">
+            <entry value="3**3" name="INVALID" />
+        </enum>
+    </enums>
+</mavlink>
+)"""";
 
-
+        MessageSet message_set;
+        CHECK_THROWS_AS(message_set.addFromXMLString(invalid_value), mav::ParseError);
+    }
 
 }
 

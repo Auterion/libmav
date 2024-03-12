@@ -37,7 +37,6 @@
 #include <utility>
 #include <memory>
 #include <optional>
-#include <bitset>
 #include <cmath>
 
 #include "MessageDefinition.h"
@@ -93,23 +92,23 @@ namespace mav {
             try {
                 uint64_t res = std::stoul(str, &pos, base);
                 if (pos != str.size()) {
-                    throw ParseError("Could not parse " + str + " as a number");
+                    throw ParseError(StringFormat() << "Could not parse " << str << " as a number" << StringFormat::end);
                 }
                 return res;
             } catch (std::exception &e) {
-                throw ParseError("Could not parse " + str + " as a number (stoul failed): " + e.what());
+                throw ParseError(StringFormat() << "Could not parse " << str << " as a number (stoul failed): " << e.what() << StringFormat::end);
             }
         }
 
         static uint64_t _parseEnumValue(const std::string &str) {
             // Check for binary format: 0b or 0B
             if (str.size() >= 2 && (str.substr(0, 2) == "0b" || str.substr(0, 2) == "0B")) {
-                return std::bitset<64>(str.substr(2)).to_ullong();
+                return _strict_stoul(str.substr(2), 2);
             }
 
             // Check for hexadecimal format: 0x or 0X
             if (str.size() >= 2 && (str.substr(0, 2) == "0x" || str.substr(0, 2) == "0X")) {
-                return _strict_stoul(str, 16);
+                return _strict_stoul(str.substr(2), 16);
             }
 
             // Check for exponential format: 2**
@@ -131,7 +130,7 @@ namespace mav {
         }
 
 
-        static bool _isPrefix(std::string_view prefix, std::string_view full) {
+        static bool _isPrefix(std::string_view prefix, std::string_view full) noexcept {
             return prefix == full.substr(0, prefix.size());
         }
 
@@ -168,7 +167,7 @@ namespace mav {
             } else if (_isPrefix("double", field_type_string)) {
                 return {FieldType::BaseType::DOUBLE, size};
             }
-            throw ParseError("Unknown field type: " + field_type_string);
+            throw ParseError(StringFormat() << "Unknown field type: " << field_type_string << StringFormat::end);
         }
 
     public:
@@ -189,7 +188,7 @@ namespace mav {
             auto doc = std::make_shared<rapidxml::xml_document<>>();
             try {
                 doc->parse<0>(file->data());
-            } catch (rapidxml::parse_error &e) {
+            } catch (const rapidxml::parse_error &e) {
                 throw ParseError(e.what());
             }
             return {file, doc, ""};
@@ -198,7 +197,7 @@ namespace mav {
 
         void parse(std::map<std::string, uint64_t> &out_enum,
                    std::map<std::string, std::shared_ptr<const MessageDefinition>> &out_messages,
-                   std::map<int, std::shared_ptr<const MessageDefinition>> &out_message_ids) {
+                   std::map<int, std::shared_ptr<const MessageDefinition>> &out_message_ids) const {
 
             auto root_node = _document->first_node("mavlink");
             if (!root_node) {
