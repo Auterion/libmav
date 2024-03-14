@@ -37,6 +37,7 @@
 #include <utility>
 #include <memory>
 #include <optional>
+#include <cmath>
 
 #include "MessageDefinition.h"
 #include "Message.h"
@@ -55,6 +56,17 @@
 
 namespace mav {
 
+    class ParseError : public std::runtime_error {
+    public:
+        explicit ParseError(const char* message) noexcept
+                : std::runtime_error(std::string(message))
+        {}
+
+        explicit ParseError(const std::string& message) noexcept
+                : std::runtime_error(message)
+        {}
+    };
+
     class XMLParser {
     private:
 
@@ -70,8 +82,55 @@ namespace mav {
                 _document(std::move(document)),
                 _root_xml_folder_path(root_xml_folder_path) {}
 
+        
+        static inline uint64_t _strict_stoul(const std::string &str, int base=10) {
+            if (str.empty()) {
+                throw ParseError("Enum value is empty string");
+            }
 
-        static bool _isPrefix(std::string_view prefix, std::string_view full) {
+            size_t pos;
+            try {
+                uint64_t res = std::stoul(str, &pos, base);
+                if (pos != str.size()) {
+                    throw ParseError(StringFormat() << "Could not parse " << str << " as a number" << StringFormat::end);
+                }
+                return res;
+            } catch (std::exception &e) {
+                throw ParseError(StringFormat() << "Could not parse " << str << " as a number (stoul failed): " << e.what() << StringFormat::end);
+            }
+        }
+
+        static uint64_t _parseEnumValue(const std::string &str) {
+            // Check for binary format: 0b or 0B
+            if (str.size() >= 2 && (str.substr(0, 2) == "0b" || str.substr(0, 2) == "0B")) {
+                return _strict_stoul(str.substr(2), 2);
+            }
+
+            // Check for hexadecimal format: 0x or 0X
+            if (str.size() >= 2 && (str.substr(0, 2) == "0x" || str.substr(0, 2) == "0X")) {
+                return _strict_stoul(str.substr(2), 16);
+            }
+
+            // Check for exponential format: 2**
+            size_t expPos = str.find("**");
+            if (expPos != std::string::npos) {
+                uint64_t base = _strict_stoul(str.substr(0, expPos));
+                if (base != 2) {
+                    throw ParseError("Exponential format only supports base 2");
+                }
+                uint64_t exponent = _strict_stoul(str.substr(expPos + 2));
+                if (exponent > 63) {
+                    throw ParseError("Exponential format only supports exponents up to 63");
+                }
+                return static_cast<uint64_t>(std::pow(base, exponent));
+            }
+
+            // If none of the above, assume decimal format
+            return _strict_stoul(str);
+        }
+
+
+        static bool _isPrefix(std::string_view prefix, std::string_view full) noexcept {
             return prefix == full.substr(0, prefix.size());
         }
 
@@ -108,7 +167,7 @@ namespace mav {
             } else if (_isPrefix("double", field_type_string)) {
                 return {FieldType::BaseType::DOUBLE, size};
             }
-            throw std::runtime_error("Unknown field type: " + field_type_string);
+            throw ParseError(StringFormat() << "Unknown field type: " << field_type_string << StringFormat::end);
         }
 
     public:
@@ -127,18 +186,22 @@ namespace mav {
             auto istream = std::istringstream(xml_string);
             auto file = std::make_shared<rapidxml::file<>>(istream);
             auto doc = std::make_shared<rapidxml::xml_document<>>();
-            doc->parse<0>(file->data());
+            try {
+                doc->parse<0>(file->data());
+            } catch (const rapidxml::parse_error &e) {
+                throw ParseError(e.what());
+            }
             return {file, doc, ""};
         }
 
 
         void parse(std::map<std::string, uint64_t> &out_enum,
                    std::map<std::string, std::shared_ptr<const MessageDefinition>> &out_messages,
-                   std::map<int, std::shared_ptr<const MessageDefinition>> &out_message_ids) {
+                   std::map<int, std::shared_ptr<const MessageDefinition>> &out_message_ids) const {
 
             auto root_node = _document->first_node("mavlink");
             if (!root_node) {
-                throw std::runtime_error("Root node \"mavlink\" not found");
+                throw ParseError("Root node \"mavlink\" not found");
             }
 #ifndef _NO_STD_FILESYSTEM
             for (auto include_element = root_node->first_node("include");
@@ -163,54 +226,52 @@ namespace mav {
                         entry = entry->next_sibling()) {
                         if (std::string_view("entry") == entry->name()) {
                             auto entry_name = entry->first_attribute("name")->value();
-                            uint64_t value = std::stoul(entry->first_attribute("value")->value());
-                            out_enum[entry_name] = value;
+                            auto value_str = entry->first_attribute("value")->value();
+                            out_enum[entry_name] = _parseEnumValue(value_str);
                         }
                     }
                 }
             }
 
             auto messages_node = root_node->first_node("messages");
-            if (!messages_node) {
-                throw std::runtime_error("Node \"messages\" not found");
-            }
+            if (messages_node) {
+                for (auto message = messages_node->first_node();
+                     message != nullptr;
+                     message = message->next_sibling()) {
 
-            for (auto message = messages_node->first_node();
-                 message != nullptr;
-                 message = message->next_sibling()) {
+                    const std::string message_name = message->first_attribute("name")->value();
+                    MessageDefinitionBuilder builder{
+                            message_name,
+                            std::stoi(message->first_attribute("id")->value())
+                    };
 
-                const std::string message_name =  message->first_attribute("name")->value();
-                MessageDefinitionBuilder builder{
-                        message_name,
-                        std::stoi(message->first_attribute("id")->value())
-                };
+                    std::string description;
 
-                std::string description;
+                    bool in_extension_fields = false;
+                    for (auto field = message->first_node();
+                         field != nullptr;
+                         field = field->next_sibling()) {
 
-                bool in_extension_fields = false;
-                for (auto field = message->first_node();
-                     field != nullptr;
-                     field = field->next_sibling()) {
+                        if (std::string_view{"description"} == field->name()) {
+                            description = field->value();
+                        } else if (std::string_view{"extensions"} == field->name()) {
+                            in_extension_fields = true;
+                        } else if (std::string_view{"field"} == field->name()) {
+                            // parse the field
+                            auto field_type = _parseFieldType(field->first_attribute("type")->value());
+                            auto field_name = field->first_attribute("name")->value();
 
-                    if (std::string_view{"description"} == field->name()) {
-                        description = field->value();
-                    } else if (std::string_view{"extensions"} == field->name()) {
-                        in_extension_fields = true;
-                    } else if (std::string_view{"field"} == field->name()) {
-                        // parse the field
-                        auto field_type = _parseFieldType(field->first_attribute("type")->value());
-                        auto field_name = field->first_attribute("name")->value();
-
-                        if (!in_extension_fields) {
-                            builder.addField(field_name, field_type);
-                        } else {
-                            builder.addExtensionField(field_name, field_type);
+                            if (!in_extension_fields) {
+                                builder.addField(field_name, field_type);
+                            } else {
+                                builder.addExtensionField(field_name, field_type);
+                            }
                         }
                     }
+                    auto definition = std::make_shared<const MessageDefinition>(builder.build());
+                    out_messages.emplace(message_name, definition);
+                    out_message_ids.emplace(definition->id(), definition);
                 }
-                auto definition = std::make_shared<const MessageDefinition>(builder.build());
-                out_messages.emplace(message_name, definition);
-                out_message_ids.emplace(definition->id(), definition);
             }
         }
     };

@@ -35,7 +35,7 @@ jobs:
         run: ./build/tests/tests
 
       - name: Generate coverage report
-        run: gcovr --sonarqube -o coverage.xml build
+        run: gcovr --exclude-throw-branches --exclude-unreachable-branches --sonarqube -o coverage.xml build
 
       - name: Run sonar-scanner
         env:
