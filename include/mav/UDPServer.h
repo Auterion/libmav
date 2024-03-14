@@ -77,6 +77,12 @@ namespace mav {
         }
 
         void joinMulticastGroup(const std::string& multicast_group, const std::string& local_address="") const {
+            int reuse = 1;
+            if (setsockopt(_socket, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse)) < 0) {
+                ::close(_socket);
+                throw NetworkError("Could not join multicast group (could not enable SO_REUSEADDR)", errno);
+            }
+
             struct ip_mreq mreq{};
             mreq.imr_multiaddr.s_addr = inet_addr(multicast_group.c_str());
             mreq.imr_interface.s_addr = local_address.empty() ? INADDR_ANY : inet_addr(local_address.c_str());
