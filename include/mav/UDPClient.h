@@ -35,9 +35,20 @@
 #ifndef LIBMAVLINK_UDPCLIENT_H
 #define LIBMAVLINK_UDPCLIENT_H
 
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
+#include <winsock2.h>
+#include <winsock.h>
+#include <ws2tcpip.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <stdint.h>
+
+// #include <sys/poll.h>
+// #include <netinet/in.h>
+// #include <arpa/inet.h>
+
+// #include <sys/socket.h>
+// #include <netinet/in.h>
+// #include <arpa/inet.h>
 #include <atomic>
 #include <vector>
 #include <array>
@@ -86,7 +97,7 @@ namespace mav {
         void stop() {
             _should_terminate.store(true);
             if (_socket >= 0) {
-                ::shutdown(_socket, SHUT_RDWR);
+                ::shutdown(_socket, SD_BOTH);
                 ::close(_socket);
                 _socket = -1;
             }
@@ -101,7 +112,7 @@ namespace mav {
             while (_bytes_available < size && !_should_terminate.load()) {
                 // If there are residual bytes from last packet, but not enough for parsing new packet, clear out
                 _bytes_available = 0;
-                ssize_t ret = ::recvfrom(_socket, _rx_buffer.data(), RX_BUFFER_SIZE, 0,
+                ssize_t ret = ::recvfrom(_socket, (char*)_rx_buffer.data(), RX_BUFFER_SIZE, 0,
                                          (struct sockaddr *) nullptr, nullptr);
                 if (ret < 0) {
                     throw NetworkError("Could not receive from socket", errno);
@@ -121,7 +132,7 @@ namespace mav {
 
         void send(const uint8_t *data, uint32_t size, ConnectionPartner) override {
             // no need to specify target here, as we called the udp connect function in constructor
-            if (sendto(_socket, data, size, 0, (struct sockaddr *) nullptr, 0) < 0) {
+            if (sendto(_socket, (const char*)data, size, 0, (struct sockaddr *) nullptr, 0) < 0) {
                 throw NetworkError("Could not send to socket", errno);
             }
         }

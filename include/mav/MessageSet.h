@@ -44,6 +44,9 @@
 #include "rapidxml/rapidxml.hpp"
 #include "rapidxml/rapidxml_utils.hpp"
 
+// Hack to avoid filesystem issues on windows
+#define _NO_STD_FILESYSTEM
+
 #ifdef _LIBCPP_VERSION
 #if _LIBCPP_VERSION < 11000
 #define _NO_STD_FILESYSTEM

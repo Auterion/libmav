@@ -35,13 +35,20 @@
 #ifndef LIBMAVLINK_TCP_H
 #define LIBMAVLINK_TCP_H
 
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
+#include <winsock2.h>
+#include <winsock.h>
+#include <ws2tcpip.h>
+#include <fcntl.h>    /* For O_RDWR */
+#include <unistd.h>   /* For open(), creat() */
+#include <stdint.h>
+
+// #include <sys/socket.h>
+// #include <netinet/in.h>
+// #include <arpa/inet.h>
 #include <atomic>
 #include <unistd.h>
 #include <csignal>
-#include <netdb.h>
+// #include <netdb.h>
 #include "Network.h"
 
 namespace mav {
@@ -84,7 +91,7 @@ namespace mav {
         void stop() {
             _should_terminate.store(true);
             if (_socket >= 0) {
-                ::shutdown(_socket, SHUT_RDWR);
+                ::shutdown(_socket, SD_BOTH);
                 ::close(_socket);
                 _socket = -1;
             }

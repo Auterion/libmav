@@ -1,7 +1,6 @@
 //
 // Created by thomas on 01.02.23.
 //
-#include <filesystem>
 #include "doctest.h"
 #include "mav/MessageSet.h"
 #include "minimal.h"
@@ -17,7 +16,7 @@ std::string dump_minimal_xml() {
     std::ofstream out(xml_file);
     out << minimal_xml;
     out.close();
-    return xml_file;
+    return xml_file.u8string();
 }
 
 TEST_CASE("Message set creation") {

@@ -34,21 +34,28 @@
 
 #ifndef LIBMAVLINK_TCPSERVER_H
 #define LIBMAVLINK_TCPSERVER_H
-#include <sys/socket.h>
-#include <sys/poll.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#include <atomic>
-#include <unistd.h>
-#include <csignal>
-#include "Network.h"
+/* clang-format off */
+#include <winsock.h>
+#include <winsock2.h>
+/* clang-format on */
+#include <ws2tcpip.h>
+
+#include "poll.h"
+// #include <sys/poll.h>
+// #include <netinet/in.h>
+// #include <arpa/inet.h>
 #include <sys/fcntl.h>
+#include <unistd.h>
+
+#include <atomic>
+#include <csignal>
+
+#include "Network.h"
 
 namespace mav {
 
     class TCPServer : public mav::NetworkInterface {
-
-    private:
+      private:
         mutable std::atomic_bool _should_terminate{false};
         int _master_socket = -1;
         mutable std::mutex _client_sockets_mutex;
@@ -106,19 +113,22 @@ namespace mav {
     public:
 
         TCPServer(int port) {
+            WSADATA wsaData;
+            WSAStartup(MAKEWORD(1, 0), &wsaData);
             _master_socket = socket(AF_INET, SOCK_STREAM, 0);
             if (_master_socket < 0) {
                 throw NetworkError("Could not create socket: " + std::to_string(_master_socket));
             }
 
             // Mark socket as non-blocking
-            if (fcntl(_master_socket, F_SETFL, O_NONBLOCK) < 0) {
+            u_long mode = 1;  // 1 to enable non-blocking socket
+            if (ioctlsocket(_master_socket, FIONBIO, &mode) < 0) {
                 ::close(_master_socket);
                 throw NetworkError("Could not set socket to non-blocking", errno);
             }
 
-            const int enable = 1;
-            if (setsockopt(_master_socket, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(int)) < 0) {
+            const char enable = 1;
+            if (setsockopt(_master_socket, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(char))) {
                 ::close(_master_socket);
                 throw NetworkError("Could not set socket options", errno);
             }
@@ -144,14 +154,14 @@ namespace mav {
             _should_terminate.store(true);
             if (_master_socket >= 0) {
                 _removeFd(_master_socket);
-                ::shutdown(_master_socket, SHUT_RDWR);
+                ::shutdown(_master_socket, SD_BOTH);
                 ::close(_master_socket);
                 _master_socket = -1;
             }
             std::lock_guard<std::mutex> lock(_client_sockets_mutex);
             for (auto client_socket : _partner_to_fd) {
                 _removeFd(client_socket.second);
-                ::shutdown(client_socket.second, SHUT_RDWR);
+                ::shutdown(client_socket.second, SD_BOTH);
                 ::close(client_socket.second);
             }
             _partner_to_fd.clear();
@@ -276,6 +286,7 @@ namespace mav {
 
         virtual ~TCPServer() {
             stop();
+            WSACleanup();
         }
 
     };

@@ -35,11 +35,13 @@
 #ifndef LIBMAVLINK_UDPSERVER_H
 #define LIBMAVLINK_UDPSERVER_H
 
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
+#include <winsock2.h>
+// #include <sys/socket.h>
+// #include <netinet/in.h>
+// #include <arpa/inet.h>
 #include <atomic>
 #include <unistd.h>
+#include <ws2tcpip.h>
 #include <vector>
 #include <array>
 #include <csignal>
@@ -79,7 +81,7 @@ namespace mav {
         void stop() const {
             _should_terminate.store(true);
             if (_socket >= 0) {
-                ::shutdown(_socket, SHUT_RDWR);
+                ::shutdown(_socket, SD_BOTH);
                 ::close(_socket);
             }
         }
@@ -95,7 +97,7 @@ namespace mav {
                 _bytes_available = 0;
                 struct sockaddr_in source_address{};
                 socklen_t source_address_length = sizeof(source_address);
-                ssize_t ret = ::recvfrom(_socket, _rx_buffer.data(), RX_BUFFER_SIZE, 0,
+                ssize_t ret = ::recvfrom(_socket, (char*)_rx_buffer.data(), RX_BUFFER_SIZE, 0,
                                      (struct sockaddr*)&source_address, &source_address_length);
                 if (ret < 0) {
                     throw NetworkError("Could not receive from socket", errno);
@@ -130,7 +132,7 @@ namespace mav {
             server_address.sin_port = target.port();
             server_address.sin_addr.s_addr = target.address();
 
-            if (sendto(_socket, data, size, 0, (struct sockaddr *) &server_address, sizeof(server_address)) < 0) {
+            if (sendto(_socket, (const char*)data, size, 0, (struct sockaddr *) &server_address, sizeof(server_address)) < 0) {
                 ::close(_socket);
                 throw NetworkError("Could not send to socket", errno);
             }
