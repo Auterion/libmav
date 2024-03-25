@@ -99,7 +99,7 @@ namespace mav {
             ConnectionPartner partner = {address.sin_addr.s_addr, address.sin_port, false};
             _fd_to_partner.insert({client_socket, partner});
             _partner_to_fd.insert({partner, client_socket});
-            _addFd(client_socket, POLLIN);
+            _addFd(client_socket, POLLRDNORM);
         }
 
         void _handleDisconnect(ConnectionPartner partner, int fd) {
@@ -202,7 +202,7 @@ namespace mav {
                         if (_poll_fds[i].revents == 0) {
                             continue;
                         }
-                        if (_poll_fds[i].revents != POLLIN) {
+                        if (_poll_fds[i].revents != POLLRDNORM) {
                             // error on socket
                             stop();
                             throw NetworkError("Error on socket");
