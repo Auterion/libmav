@@ -34,13 +34,13 @@
 
 #ifndef LIBMAVLINK_TCPSERVER_H
 #define LIBMAVLINK_TCPSERVER_H
+
 /* clang-format off */
-#include <winsock.h>
 #include <winsock2.h>
+#include <winsock.h>
 /* clang-format on */
 #include <ws2tcpip.h>
 
-#include "poll.h"
 // #include <sys/poll.h>
 // #include <netinet/in.h>
 // #include <arpa/inet.h>
@@ -59,7 +59,7 @@ namespace mav {
         mutable std::atomic_bool _should_terminate{false};
         int _master_socket = -1;
         mutable std::mutex _client_sockets_mutex;
-        std::vector<struct pollfd> _poll_fds;
+        std::vector<WSAPOLLFD> _poll_fds;
 
         int _current_client_socket = -1;
         ConnectionPartner _current_client;
@@ -69,7 +69,7 @@ namespace mav {
 
 
         void _addFd(int fd, int16_t events) {
-            struct pollfd pfd = {};
+            WSAPOLLFD pfd = {};
             pfd.fd = fd;
             pfd.events = events;
             _poll_fds.push_back(pfd);
@@ -183,7 +183,7 @@ namespace mav {
                 }
 
                 // check for activity on one of the sockets
-                auto poll_ret = poll(_poll_fds.data(), _poll_fds.size(), 1000);
+                auto poll_ret = WSAPoll(_poll_fds.data(), _poll_fds.size(), 1000);
                 if (poll_ret < 0) {
                     if (errno == EINTR) {
                         continue;
@@ -225,7 +225,9 @@ namespace mav {
 
                     // do the actual read
                     if (socket_to_read_from >= 0) {
-                        auto ret = read(socket_to_read_from, destination, size - bytes_received);
+                        char* destination_char = (char*)destination;
+                        auto ret =
+                            recv(socket_to_read_from, destination_char, size - bytes_received, 0);
                         if (ret <= 0) {
                             // client disconnected
                             _handleDisconnect(partner_to_read_from, socket_to_read_from);
@@ -246,7 +248,8 @@ namespace mav {
         void _sendToSingleTarget(const uint8_t *data, uint32_t size, int partner_socket) {
             uint32_t sent = 0;
             while (sent < size && !_should_terminate.load()) {
-                auto ret = write(partner_socket, data, size - sent);
+                char* data_char = (char*)data;
+                auto ret = ::send(partner_socket, data_char, size - sent, 0);
                 if (ret < 0) {
                     throw NetworkError("Could not write to socket", errno);
                 }
