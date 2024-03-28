@@ -193,7 +193,7 @@ namespace mav {
         }
 
         CallbackHandle addMessageCallback(const std::function<void(const mav::Message&)> &on_message,
-                                          const std::function<void(const std::exception_ptr&)> on_error) {
+                                          const std::function<void(const std::exception_ptr&)> &on_error) {
             std::scoped_lock<std::mutex> lock(_message_callback_mtx);
             CallbackHandle handle = _next_handle;
             _message_callbacks[handle] = FunctionCallback{on_message, on_error};
@@ -215,7 +215,7 @@ namespace mav {
             }, on_error);
         }
 
-        CallbackHandle addMessageCallback(int message_id, std::function<void(const mav::Message&)> on_message,
+        CallbackHandle addMessageCallback(int message_id, const std::function<void(const mav::Message&)> &on_message,
                                           int source_id=mav::ANY_ID, int component_id=mav::ANY_ID) {
             return addMessageCallback([message_id, source_id, component_id](const Message &message) {
                 return message.id() == message_id &&
@@ -224,7 +224,7 @@ namespace mav {
             }, on_message, std::function<void(const std::exception_ptr&)>{});
         }
 
-        CallbackHandle addMessageCallback(const std::string &message_name, std::function<void(const mav::Message&)> on_message,
+        CallbackHandle addMessageCallback(const std::string &message_name, const std::function<void(const mav::Message&)> &on_message,
                                           int source_id=mav::ANY_ID, int component_id=mav::ANY_ID) {
             return addMessageCallback(_message_set.idForMessage(message_name), on_message, source_id, component_id);
         }
