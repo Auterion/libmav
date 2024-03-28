@@ -192,8 +192,8 @@ namespace mav {
             return !_underlying_network_fault && (millis() - _last_received_ms < CONNECTION_TIMEOUT);
         }
 
-        template<typename T, typename E>
-        CallbackHandle addMessageCallback(const T &on_message, const E &on_error) {
+        CallbackHandle addMessageCallback(const std::function<void(const mav::Message&)> &on_message,
+                                          const std::function<void(const std::exception_ptr&)> on_error) {
             std::scoped_lock<std::mutex> lock(_message_callback_mtx);
             CallbackHandle handle = _next_handle;
             _message_callbacks[handle] = FunctionCallback{on_message, on_error};
@@ -201,9 +201,32 @@ namespace mav {
             return handle;
         }
 
-        template<typename T>
-        CallbackHandle addMessageCallback(const T &on_message) {
-            return addMessageCallback(on_message, nullptr);
+        CallbackHandle addMessageCallback(const std::function<void(const mav::Message&)> &on_message) {
+            return addMessageCallback(on_message, std::function<void(const std::exception_ptr&)>{});
+        }
+
+        CallbackHandle addMessageCallback(const std::function<bool(const mav::Message&)> &selector,
+                                          const std::function<void(const mav::Message&)> &on_message,
+                                          const std::function<void(const std::exception_ptr&)> &on_error) {
+            return addMessageCallback([selector, on_message](const Message &message) {
+                if (selector(message)) {
+                    on_message(message);
+                }
+            }, on_error);
+        }
+
+        CallbackHandle addMessageCallback(int message_id, std::function<void(const mav::Message&)> on_message,
+                                          int source_id=mav::ANY_ID, int component_id=mav::ANY_ID) {
+            return addMessageCallback([message_id, source_id, component_id](const Message &message) {
+                return message.id() == message_id &&
+                    (source_id == mav::ANY_ID || message.header().systemId() == source_id) &&
+                    (component_id == mav::ANY_ID || message.header().componentId() == component_id);
+            }, on_message, std::function<void(const std::exception_ptr&)>{});
+        }
+
+        CallbackHandle addMessageCallback(const std::string &message_name, std::function<void(const mav::Message&)> on_message,
+                                          int source_id=mav::ANY_ID, int component_id=mav::ANY_ID) {
+            return addMessageCallback(_message_set.idForMessage(message_name), on_message, source_id, component_id);
         }
 
         void removeMessageCallback(CallbackHandle handle) {

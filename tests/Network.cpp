@@ -308,4 +308,20 @@ TEST_CASE("Create network runtime") {
         connection->receive("HEARTBEAT");
         CHECK_EQ(connection->callbackCount(), 0);
     }
+
+    SUBCASE("Message callback for specific message is called when message arrives") {
+        interface.reset();
+        std::promise<void> callback_called_promise;
+        auto callback_called_future = callback_called_promise.get_future();
+
+        connection->addMessageCallback("TEST_MESSAGE", [&callback_called_promise](const Message &message) {
+            if (message.name() == "TEST_MESSAGE") {
+                callback_called_promise.set_value();
+            }
+        });
+
+        interface.addToReceiveQueue("\xfd\x10\x00\x00\x01\x61\x61\xbc\x26\x00\x2a\x00\x00\x00\x48\x65\x6c\x6c\x6f\x20\x57\x6f\x72\x6c\x64\x21\x53\xd9"s, interface_partner);
+        CHECK((callback_called_future.wait_for(std::chrono::seconds(2)) != std::future_status::timeout));
+        connection->removeAllCallbacks();
+    }
 }
