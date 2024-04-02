@@ -9,6 +9,7 @@
 
 using namespace mav;
 
+#ifndef _NO_STD_FILESYSTEM
 std::string dump_minimal_xml() {
     // write temporary file
     auto temp_path = std::filesystem::temp_directory_path();
@@ -18,12 +19,20 @@ std::string dump_minimal_xml() {
     out.close();
     return xml_file.u8string();
 }
+#endif
 
 TEST_CASE("Message set creation") {
 
+#ifndef _NO_STD_FILESYSTEM
+    // test loading from file for systems with std::filesystem
     auto file_name = dump_minimal_xml();
     MessageSet message_set{file_name};
     std::remove(file_name.c_str());
+#else
+    // just load from the string for systems without filesystem
+    MessageSet message_set;
+    message_set.addFromXMLString(minimal_xml);
+#endif
 
     CHECK_EQ(message_set.size(), 2);
 
@@ -65,9 +74,16 @@ TEST_CASE("Message set creation") {
 }
 
 TEST_CASE("Create messages from set") {
+#ifndef _NO_STD_FILESYSTEM
+    // test loading from file for systems with std::filesystem
     auto file_name = dump_minimal_xml();
     MessageSet message_set{file_name};
     std::remove(file_name.c_str());
+#else
+    // just load from the string for systems without filesystem
+    MessageSet message_set;
+    message_set.addFromXMLString(minimal_xml);
+#endif
 
     REQUIRE(message_set.contains("HEARTBEAT"));
     SUBCASE("Can create message from name") {
