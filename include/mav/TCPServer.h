@@ -90,7 +90,7 @@ namespace mav {
             auto client_socket = accept(_master_socket, (struct sockaddr *) &client_address,
                                         &client_address_length);
             if (client_socket < 0) {
-                ::close(_master_socket);
+                closesocket(_master_socket);
                 throw NetworkError("Could not accept connection", errno);
             }
             struct sockaddr_in address{};
@@ -107,7 +107,7 @@ namespace mav {
             _partner_to_fd.erase(partner);
             _fd_to_partner.erase(fd);
             _removeFd(fd);
-            ::close(fd);
+            closesocket(fd);
         }
 
     public:
@@ -123,13 +123,13 @@ namespace mav {
             // Mark socket as non-blocking
             u_long mode = 1;  // 1 to enable non-blocking socket
             if (ioctlsocket(_master_socket, FIONBIO, &mode) < 0) {
-                ::close(_master_socket);
+                closesocket(_master_socket);
                 throw NetworkError("Could not set socket to non-blocking", errno);
             }
 
             const char enable = 1;
             if (setsockopt(_master_socket, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(char))) {
-                ::close(_master_socket);
+                closesocket(_master_socket);
                 throw NetworkError("Could not set socket options", errno);
             }
             struct sockaddr_in server_address{};
@@ -138,12 +138,12 @@ namespace mav {
             server_address.sin_addr.s_addr = htonl(INADDR_ANY);
 
             if (bind(_master_socket, (struct sockaddr *) &server_address, sizeof(server_address)) < 0) {
-                ::close(_master_socket);
+                closesocket(_master_socket);
                 throw NetworkError("Could not bind socket", errno);
             }
 
             if (listen(_master_socket, 32) < 0) {
-                ::close(_master_socket);
+                closesocket(_master_socket);
                 throw NetworkError("Could not listen on socket", errno);
             }
 
@@ -155,14 +155,14 @@ namespace mav {
             if (_master_socket >= 0) {
                 _removeFd(_master_socket);
                 ::shutdown(_master_socket, SD_BOTH);
-                ::close(_master_socket);
+                closesocket(_master_socket);
                 _master_socket = -1;
             }
             std::lock_guard<std::mutex> lock(_client_sockets_mutex);
             for (auto client_socket : _partner_to_fd) {
                 _removeFd(client_socket.second);
                 ::shutdown(client_socket.second, SD_BOTH);
-                ::close(client_socket.second);
+                closesocket(client_socket.second);
             }
             _partner_to_fd.clear();
             _fd_to_partner.clear();
