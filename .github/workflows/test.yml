@@ -13,7 +13,7 @@ jobs:
                 sonarcloud-build-wrapper : build-wrapper-linux-x86-64
               - runner: ubuntu-20.04
                 sonarcloud-build-wrapper : build-wrapper-linux-x86-64
-              - runner: macos-latest
+              - runner: macos-13
                 sonarcloud-build-wrapper : build-wrapper-macosx-x86
     runs-on: ${{ matrix.platform.runner }}
     steps:

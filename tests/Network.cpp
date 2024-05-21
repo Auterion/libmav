@@ -94,7 +94,7 @@ uint64_t getTimestamp() {
     return 770479200;
 }
 
-TEST_CASE("Create network runtime") {
+TEST_CASE("Network runtime") {
 
     MessageSet message_set;
     message_set.addFromXMLString(R"(
@@ -153,6 +153,24 @@ TEST_CASE("Create network runtime") {
         CHECK_EQ(message.name(), "TEST_MESSAGE");
         CHECK_EQ(message.get<int>("value"), 42);
         CHECK_EQ(message.get<std::string>("text"), "Hello World!");
+    }
+
+    SUBCASE("Selects correct message for specific message id, system id, component id") {
+        interface.reset();
+        auto expectation = connection->expect("TEST_MESSAGE", 1, 1);
+        // message with wrong system id
+        interface.addToReceiveQueue("\xfd\x10\x00\x00\x01\x02\x01\xbc\x26\x00\x2a\x00\x00\x00\x48\x65\x6c\x6c\x6f\x20\x57\x6f\x72\x6c\x64\x21\xa0\xcb"s, interface_partner);
+        // message with wrong component id
+        interface.addToReceiveQueue("\xfd\x10\x00\x00\x01\x01\x02\xbc\x26\x00\x2a\x00\x00\x00\x48\x65\x6c\x6c\x6f\x20\x57\x6f\x72\x6c\x64\x21\xe2\x61"s, interface_partner);
+        // message with wrong message id
+        interface.addToReceiveQueue("\xfd\x09\x00\x00\x00\xfd\x01\x00\x00\x00\x04\x00\x00\x00\x01\x02\x03\x05\x06\x77\x53"s, interface_partner);
+        // message with correct system id and component id and message id
+        interface.addToReceiveQueue("\xfd\x10\x00\x00\x01\x01\x01\xbc\x26\x00\x2a\x00\x00\x00\x48\x65\x6c\x6c\x6f\x20\x57\x6f\x72\x6c\x64\x21\x56\x38"s, interface_partner);
+        auto message = connection->receive(expectation);
+        // we should only have received the last message
+        CHECK_EQ(message.name(), "TEST_MESSAGE");
+        CHECK_EQ(message.header().systemId(), 1);
+        CHECK_EQ(message.header().componentId(), 1);
     }
 
 
@@ -307,5 +325,59 @@ TEST_CASE("Create network runtime") {
         // wait for the heartbeat to be received, to make sure timing is correct in test
         connection->receive("HEARTBEAT");
         CHECK_EQ(connection->callbackCount(), 0);
+    }
+
+    SUBCASE("Message callback for specific message is called when message arrives") {
+        interface.reset();
+        std::promise<void> callback_called_promise;
+        auto callback_called_future = callback_called_promise.get_future();
+
+        connection->addMessageCallback("TEST_MESSAGE", [&callback_called_promise](const Message &message) {
+            if (message.name() == "TEST_MESSAGE") {
+                callback_called_promise.set_value();
+            }
+        });
+
+        interface.addToReceiveQueue("\xfd\x10\x00\x00\x01\x61\x61\xbc\x26\x00\x2a\x00\x00\x00\x48\x65\x6c\x6c\x6f\x20\x57\x6f\x72\x6c\x64\x21\x53\xd9"s, interface_partner);
+        CHECK((callback_called_future.wait_for(std::chrono::seconds(2)) != std::future_status::timeout));
+        connection->removeAllCallbacks();
+    }
+
+    SUBCASE("Can specify message callbacks for message id, source system id and source component id") {
+        interface.reset();
+
+        // these should not get called
+        connection->addMessageCallback(9916, [](const Message &message) {
+            FAIL("This callback should not be called");
+        }, 1, 2);
+
+        connection->addMessageCallback(9916, [](const Message &message) {
+            FAIL("This callback should not be called");
+        }, 2, 1);
+
+        connection->addMessageCallback(9917, [](const Message &message) {
+            FAIL("This callback should not be called");
+        }, 1, 1);
+
+        // run a send-receive twice - if we succeed the second time around, we know for sure that the FAIL were not
+        // called from the first time around, since there is only a single receive thread.
+        for (int i=0; i<2; i++) {
+            std::promise<void> callback_called_promise;
+            auto callback_called_future = callback_called_promise.get_future();
+
+
+            // this should get called
+            auto cb = connection->addMessageCallback(9916, [&callback_called_promise](const Message &message) {
+                if (message.name() == "TEST_MESSAGE") {
+                    callback_called_promise.set_value();
+                }
+            }, 1, 1);
+
+            // message id is 9916, source system id is 1, source component id is 1
+            interface.addToReceiveQueue("\xfd\x10\x00\x00\x01\x01\x01\xbc\x26\x00\x2a\x00\x00\x00\x48\x65\x6c\x6c\x6f\x20\x57\x6f\x72\x6c\x64\x21\x56\x38"s, interface_partner);
+            CHECK((callback_called_future.wait_for(std::chrono::seconds(2)) != std::future_status::timeout));
+            connection->removeMessageCallback(cb);
+        }
+        connection->removeAllCallbacks();
     }
 }
