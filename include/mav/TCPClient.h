@@ -64,7 +64,7 @@ namespace mav {
             if (timeout > 0) {
                 struct timeval send_timeout;
                 send_timeout.tv_sec = 0;
-                send_timeout.tv_usec = timeout;
+                send_timeout.tv_usec = timeout * 1000; // timeout is in ms
                 setsockopt(_socket, SOL_SOCKET, SO_SNDTIMEO, &send_timeout, sizeof(send_timeout));
             }
 
