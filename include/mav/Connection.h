@@ -63,9 +63,7 @@ namespace mav {
 
         struct PromiseCallback {
             Expectation promise;
-            int message_id;
-            int system_id;
-            int component_id;
+            std::function<bool(const Message &message)> selector;
         };
 
         using Callback = std::variant<FunctionCallback, PromiseCallback>;
@@ -123,9 +121,7 @@ namespace mav {
                             }
                             it++;
                         } else if constexpr (std::is_same_v<T, PromiseCallback>) {
-                            if (message.id() == arg.message_id &&
-                                    (arg.system_id == mav::ANY_ID || message.header().systemId() == arg.system_id) &&
-                                    (arg.component_id == mav::ANY_ID || message.header().componentId() == arg.component_id)) {
+                            if (arg.selector(message)) {
                                 arg.promise->set_value(message);
                                 it = _message_callbacks.erase(it);
                             } else {
@@ -199,18 +195,22 @@ namespace mav {
             _message_callbacks.erase(handle);
         }
 
-
-        [[nodiscard]] Expectation expect(int message_id, int source_id=mav::ANY_ID,
-                                         int component_id=mav::ANY_ID) {
-
+        [[nodiscard]] Expectation expect(std::function<bool(const mav::Message&)> selector) {
             auto promise = std::make_shared<std::promise<Message>>();
             std::scoped_lock<std::mutex> lock(_message_callback_mtx);
             CallbackHandle handle = _next_handle;
-            _message_callbacks[handle] = PromiseCallback{promise, message_id, source_id, component_id};
+            _message_callbacks[handle] = PromiseCallback{promise, std::move(selector)};
             _next_handle++;
-
-            auto prom = std::make_shared<std::promise<Message>>();
             return promise;
+        }
+
+        [[nodiscard]] Expectation expect(int message_id, int source_id=mav::ANY_ID,
+                                         int component_id=mav::ANY_ID) {
+            return expect([message_id, source_id, component_id](const Message &message) {
+                    return message.id() == message_id &&
+                           (source_id == mav::ANY_ID || message.header().systemId() == source_id) &&
+                           (component_id == mav::ANY_ID || message.header().componentId() == component_id);
+            });
         }
 
         [[nodiscard]] inline Expectation expect(const std::string &message_name, int source_id=mav::ANY_ID,
@@ -249,6 +249,10 @@ namespace mav {
 
         Message inline receive(int message_id, int timeout_ms=-1) {
             return receive(message_id, mav::ANY_ID, mav::ANY_ID, timeout_ms);
+        }
+
+        Message inline receive(std::function<bool(const mav::Message&)> selector, int timeout_ms=-1) {
+            return receive(expect(std::move(selector)), timeout_ms);
         }
     };
 

@@ -90,6 +90,9 @@ public:
     }
 };
 
+uint64_t getTimestamp() {
+    return 770479200;
+}
 
 TEST_CASE("Create network runtime") {
 
@@ -121,6 +124,9 @@ TEST_CASE("Create network runtime") {
 
     DummyInterface interface;
     NetworkRuntime network({253, 1}, message_set, interface);
+
+    std::array<uint8_t, 32> key;
+    for (int i = 0 ; i < 32; i++) key[i] = i;
 
     // send a heartbeat message, to establish a connection
     interface.addToReceiveQueue("\xfd\x09\x00\x00\x00\xfd\x01\x00\x00\x00\x04\x00\x00\x00\x01\x02\x03\x05\x06\x77\x53"s, interface_partner);
@@ -157,6 +163,19 @@ TEST_CASE("Create network runtime") {
         interface.addToReceiveQueue("\xfd\x10\x00\x00\x01\x61\x61\xbc\x26\x00\x2a\x00\x00\x00\x48\x65\x6c\x6c\x6f\x20\x57\x6f\x72\x6c\x64\x21\x53\xd9"s, interface_partner);
         auto message = connection->receive(expectation);
         CHECK_EQ(message.name(), "TEST_MESSAGE");
+    }
+
+    SUBCASE("Receiver re-synchronizes when garbage data between messages") {
+        interface.reset();
+        auto expectation_1 = connection->expect("TEST_MESSAGE");
+        auto expectation_2 = connection->expect("TEST_MESSAGE");
+        interface.addToReceiveQueue("\xfd\x10\x00\x00\x01\x61\x61\xbc\x26\x00\x2a\x00\x00\x00\x48\x65\x6c\x6c\x6f\x20\x57\x6f\x72\x6c\x64\x21\x53\xd9"s, interface_partner);
+        interface.addToReceiveQueue("this is garbage data"s, interface_partner);
+        interface.addToReceiveQueue("\xfd\x10\x00\x00\x01\x61\x61\xbc\x26\x00\x2a\x00\x00\x00\x48\x65\x6c\x6c\x6f\x20\x57\x6f\x72\x6c\x64\x21\x53\xd9"s, interface_partner);
+        auto message_1 = connection->receive(expectation_1);
+        CHECK_EQ(message_1.name(), "TEST_MESSAGE");
+        auto message_2 = connection->receive(expectation_2);
+        CHECK_EQ(message_2.name(), "TEST_MESSAGE");
     }
 
     SUBCASE("Can not receive message from wrong partner") {
@@ -199,5 +218,51 @@ TEST_CASE("Create network runtime") {
         auto message = connection->receive(expectation);
         CHECK_EQ(message.name(), "HEARTBEAT");
         CHECK(connection->alive());
+    }
+
+    SUBCASE("Enable message signing") {
+        auto message = message_set.create("TEST_MESSAGE")({
+          {"value", 42},
+          {"text", "Hello World!"}
+        });
+        interface.reset();
+        network.enableMessageSigning(key);
+        connection->send(message);
+        CHECK(message.header().isSigned());
+        // don't check anything after link_id in signature as the timestamp is dependent on current time
+        bool found = (interface.sendSpongeContains(
+                "\xfd\x10\x01\x00\x00\xfd\x01\xbc\x26\x00\x2a\x00\x00\x00\x48\x65\x6c\x6c\x6f\x20\x57\x6f\x72\x6c\x64\x21\xfd\x33\x00"s,
+                interface_partner));
+        CHECK(found);
+    }
+
+    SUBCASE("Enable message signing with custom timestamp function") {
+        auto message = message_set.create("TEST_MESSAGE")({
+          {"value", 42},
+          {"text", "Hello World!"}
+        });
+        interface.reset();
+        network.enableMessageSigning(key, getTimestamp);
+        connection->send(message);
+        CHECK(message.header().isSigned());
+        bool found = (interface.sendSpongeContains(
+                "\xfd\x10\x01\x00\x00\xfd\x01\xbc\x26\x00\x2a\x00\x00\x00\x48\x65\x6c\x6c\x6f\x20\x57\x6f\x72\x6c\x64\x21\xfd\x33\x00\x60\x94\xec\x2d\x00\x00\x7b\xab\xfa\x1a\xed\xf9"s,
+                interface_partner));
+        CHECK(found);
+    }
+
+    SUBCASE("Disable message signing") {
+        auto message = message_set.create("TEST_MESSAGE")({
+          {"value", 42},
+          {"text", "Hello World!"}
+        });
+        interface.reset();
+        network.disableMessageSigning();
+        connection->send(message);
+        CHECK(!message.header().isSigned());
+        bool found = (interface.sendSpongeContains(
+                "\xfd\x10\x00\x00\x00\xfd\x01\xbc\x26\x00\x2a\x00\x00\x00\x48\x65\x6c\x6c\x6f\x20\x57\x6f\x72\x6c\x64\x21\x86\x37"s,
+                interface_partner));
+        CHECK(found);
     }
 }

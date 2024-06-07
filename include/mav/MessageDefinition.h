@@ -367,8 +367,12 @@ namespace mav {
         static constexpr int MAX_PAYLOAD_SIZE = 255;
         static constexpr int HEADER_SIZE = 10;
         static constexpr int CHECKSUM_SIZE = 2;
-        static constexpr int SIGNATURE_SIZE = 13;
+        static constexpr int SIGNATURE_LINK_ID_SIZE = 1;
+        static constexpr int SIGNATURE_TIMESTAMP_SIZE = 6;
+        static constexpr int SIGNATURE_SIGNATURE_SIZE = 6;
+        static constexpr int SIGNATURE_SIZE = SIGNATURE_LINK_ID_SIZE + SIGNATURE_TIMESTAMP_SIZE + SIGNATURE_SIGNATURE_SIZE;
         static constexpr int MAX_MESSAGE_SIZE = MAX_PAYLOAD_SIZE + HEADER_SIZE + CHECKSUM_SIZE + SIGNATURE_SIZE;
+        static constexpr int KEY_SIZE = 32;
 
         [[nodiscard]] inline const std::string& name() const {
             return _name;

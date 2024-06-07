@@ -8,12 +8,40 @@ jobs:
     strategy:
         fail-fast: false
         matrix:
-            platform: [ubuntu-latest, macos-latest]
-    runs-on: ${{ matrix.platform }}
+            platform:
+              - runner: ubuntu-latest
+                sonarcloud-build-wrapper : build-wrapper-linux-x86-64
+              - runner: ubuntu-20.04
+                sonarcloud-build-wrapper : build-wrapper-linux-x86-64
+              - runner: macos-latest
+                sonarcloud-build-wrapper : build-wrapper-macosx-x86
+    runs-on: ${{ matrix.platform.runner }}
     steps:
       - uses: actions/checkout@v3
+
+      - name: Install gcovr
+        run: pip3 install gcovr
+
+      - name: Setup sonar cloud
+        uses: SonarSource/sonarcloud-github-c-cpp@v2.0.2
+
       - name: Build tests
-        run: mkdir build && cd build && cmake .. && make tests
-      - name: Run tests
-        run: ./tests/tests
-        working-directory: build
+        run: cmake -B build -S .
+
+      - name: Build tests
+        run: ${{ matrix.platform.sonarcloud-build-wrapper }} --out-dir bw-output cmake --build build
+
+      - name: Run tests and coverage
+        run: ./build/tests/tests
+
+      - name: Generate coverage report
+        run: gcovr --sonarqube -o coverage.xml build
+
+      - name: Run sonar-scanner
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.AUTERION_CI_SONAR_TOKEN }}
+        run: |
+          sonar-scanner \
+            --define sonar.cfamily.build-wrapper-output="bw-output" \
+            --define sonar.coverageReportPaths=coverage.xml

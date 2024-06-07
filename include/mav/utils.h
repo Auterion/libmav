@@ -32,6 +32,7 @@
  * 
  ****************************************************************************/
 
+#include <cstring>
 #include <sstream>
 #include <string_view>
 #include <chrono>
@@ -77,14 +78,14 @@ namespace mav {
     };
 
     template <typename T>
-    inline void serialize(const T &v, uint8_t* destination) {
+    inline void serialize(const T &v, uint8_t* destination) noexcept {
         auto src_ptr = static_cast<const uint8_t*>(static_cast<const void*>(&v));
         std::copy(src_ptr, src_ptr + sizeof(T), destination);
     }
 
 
     template <typename T>
-    inline T deserialize(const uint8_t* source, int deserialize_size) {
+    inline T deserialize(const uint8_t* source, int deserialize_size) noexcept {
         // in case we do not have any bytes to read, we return 0
         if (deserialize_size <= 0) {
             return T{0};
@@ -99,7 +100,7 @@ namespace mav {
     }
 
 
-    inline uint64_t millis() {
+    inline uint64_t millis() noexcept {
         return std::chrono::duration_cast<std::chrono::milliseconds>(
                 std::chrono::system_clock::now().time_since_epoch()).count();
     }
@@ -115,21 +116,25 @@ namespace mav {
         static constexpr formatEndType end{};
         static constexpr formatEndType toString{};
 
+#if __GNUC__ > 9
+        StringFormat() noexcept = default;
+#endif
+
         template <typename T>
-        StringFormat& operator<< (const T &value) {
+        StringFormat& operator<< (const T &value) noexcept {
             _stream << value;
             return *this;
         }
 
-        std::string operator<< (const formatEndType&) {
+        std::string operator<< (const formatEndType&) noexcept {
             return _stream.str();
         }
 
-        std::string str() const {
+        std::string str() const noexcept {
             return _stream.str();
         }
 
-        explicit operator std::string() const {
+        explicit operator std::string() const noexcept {
             return _stream.str();
         }
     };
@@ -203,25 +208,25 @@ namespace mav {
     }
 
 
-    template<typename A, typename B>
-    A _packUnpack(B b) {
-        union U {
-            A a;
-            B b;
-        };
-        U u;
-        u.b = b;
-        return u.a;
+    template<typename To, typename From>
+    To _packUnpack(From o) {
+        static_assert(sizeof(To) == sizeof(From), "Cannot pack/unpack different sizes");
+        static_assert(std::is_trivially_copyable<To>::value, "Cannot pack/unpack non-trivially copyable types");
+        static_assert(std::is_trivially_copyable<From>::value, "Cannot pack/unpack non-trivially copyable types");
+        To result;
+        std::memcpy(&result, &o, sizeof(To));
+        return result;
+    }
+    
+
+    template<typename To>
+    To floatUnpack(float f) {
+        return _packUnpack<To, float>(f);
     }
 
-    template<typename T>
-    T floatUnpack(float f) {
-        return _packUnpack<T, float>(f);
-    }
-
-    template<typename T>
-    float floatPack(T o) {
-        return _packUnpack<float, T>(o);
+    template<typename From>
+    float floatPack(From o) {
+        return _packUnpack<float, From>(o);
     }
 
 
