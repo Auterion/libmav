@@ -1,7 +1,3 @@
-//
-// Created by Thomas Debrunner on 05.02.23.
-//
-
 #ifndef LIBMAVLINK_MINIMAL_H
 #define LIBMAVLINK_MINIMAL_H
 
@@ -754,5 +750,4 @@ const char minimal_xml[] = R""""(
 
 )"""";
 
-
-#endif //LIBMAVLINK_MINIMAL_H
+#endif // LIBMAVLINK_MINIMAL_H
