@@ -73,14 +73,17 @@ namespace mav {
         std::shared_ptr<rapidxml::file<>> _source_file;
         std::shared_ptr<rapidxml::xml_document<>> _document;
         std::string _root_xml_folder_path;
+        bool _recursive_open_files;
 
         XMLParser(
                 std::shared_ptr<rapidxml::file<>> source_file,
                 std::shared_ptr<rapidxml::xml_document<>> document,
-                const std::string &root_xml_folder_path) :
+                const std::string &root_xml_folder_path,
+                bool recursive_open_files) :
                 _source_file(std::move(source_file)),
                 _document(std::move(document)),
-                _root_xml_folder_path(root_xml_folder_path) {}
+                _root_xml_folder_path(root_xml_folder_path),
+                _recursive_open_files(recursive_open_files) {}
 
         
         static inline uint64_t _strict_stoul(const std::string &str, int base=10) {
@@ -172,16 +175,16 @@ namespace mav {
 
     public:
 #ifndef _NO_STD_FILESYSTEM
-        static XMLParser forFile(const std::string &file_name) {
+        static XMLParser forFile(const std::string &file_name, bool recursive_open_includes) {
             auto file = std::make_shared<rapidxml::file<>>(file_name.c_str());
             auto doc = std::make_shared<rapidxml::xml_document<>>();
             doc->parse<0>(file->data());
 
-            return {file, doc, std::filesystem::path{file_name}.parent_path().string()};
+            return {file, doc, std::filesystem::path{file_name}.parent_path().string(), recursive_open_includes};
         }
 #endif // _NO_STD_FILESYSTEM
 
-        static XMLParser forXMLString(const std::string &xml_string) {
+        static XMLParser forXMLString(const std::string &xml_string, bool recursive_open_includes) {
             // pass by value on purpose, rapidxml mutates the string on parse
             auto istream = std::istringstream(xml_string);
             auto file = std::make_shared<rapidxml::file<>>(istream);
@@ -191,7 +194,7 @@ namespace mav {
             } catch (const rapidxml::parse_error &e) {
                 throw ParseError(e.what());
             }
-            return {file, doc, ""};
+            return {file, doc, "", recursive_open_includes};
         }
 
 
@@ -204,14 +207,16 @@ namespace mav {
                 throw ParseError("Root node \"mavlink\" not found");
             }
 #ifndef _NO_STD_FILESYSTEM
-            for (auto include_element = root_node->first_node("include");
-                include_element != nullptr;
-                include_element = include_element->next_sibling("include")) {
+            if (_recursive_open_files) {
+                for (auto include_element = root_node->first_node("include");
+                     include_element != nullptr;
+                     include_element = include_element->next_sibling("include")) {
 
-                const std::string include_name = include_element->value();
-                auto sub_parser = XMLParser::forFile(
-                        (std::filesystem::path{_root_xml_folder_path} / include_name).string());
-                sub_parser.parse(out_enum, out_messages, out_message_ids);
+                    const std::string include_name = include_element->value();
+                    auto sub_parser = XMLParser::forFile(
+                            (std::filesystem::path{_root_xml_folder_path} / include_name).string(), true);
+                    sub_parser.parse(out_enum, out_messages, out_message_ids);
+                }
             }
 #endif // _NO_STD_FILESYSTEM
 
@@ -291,14 +296,14 @@ namespace mav {
             addFromXML(xml_path);
         }
 
-        void addFromXML(const std::string &file_path) {
-            XMLParser parser = XMLParser::forFile(file_path);
+        void addFromXML(const std::string &file_path, bool recursive_open_includes = true) {
+            XMLParser parser = XMLParser::forFile(file_path, recursive_open_includes);
             parser.parse(_enums, _messages, _message_ids);
         }
 #endif // _NO_STD_FILESYSTEM
 
-        void addFromXMLString(const std::string &xml_string) {
-            XMLParser parser = XMLParser::forXMLString(xml_string);
+        void addFromXMLString(const std::string &xml_string, bool recursive_open_includes = false) {
+            XMLParser parser = XMLParser::forXMLString(xml_string, recursive_open_includes);
             parser.parse(_enums, _messages,_message_ids);
         }
 
