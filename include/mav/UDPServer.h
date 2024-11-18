@@ -107,11 +107,9 @@ namespace mav {
         ConnectionPartner receive(uint8_t *destination, uint32_t size) override {
             // Receive as many messages as needed to have enough bytes available (none if already enough bytes)
             while (_bytes_available < size && !_should_terminate.load()) {
-                // If there are residual bytes from last packet, but not enough for parsing new packet, clear out
-                _bytes_available = 0;
                 struct sockaddr_in source_address{};
                 socklen_t source_address_length = sizeof(source_address);
-                ssize_t ret = ::recvfrom(_socket, _rx_buffer.data(), RX_BUFFER_SIZE, 0,
+                ssize_t ret = ::recvfrom(_socket, _rx_buffer.data() + _bytes_available, RX_BUFFER_SIZE - _bytes_available, 0,
                                      (struct sockaddr*)&source_address, &source_address_length);
                 if (ret < 0) {
                     throw NetworkError("Could not receive from socket", errno);
