@@ -180,7 +180,7 @@ auto message = message_set.create("PARAM_REQUEST_READ") ({
         {"param_index", -1}
 });
 // send a message
-conection.send(message);
+conection->send(message);
 
 // ⚠️ Potential race condition here! (read below)
 
@@ -204,7 +204,7 @@ auto message = message_set.create("PARAM_REQUEST_READ") ({
 // Already watch for the answer
 auto expectation = connection->expect("PARAM_VALUE");
 // send the message
-conection.send(message);
+conection->send(message);
 // Wait for the answer, with a 1s timeout
 auto response = connection->receive(expecation, 1000);
 ```
