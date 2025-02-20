@@ -11,7 +11,7 @@ jobs:
             platform:
               - runner: ubuntu-latest
                 sonarcloud-build-wrapper : build-wrapper-linux-x86-64
-              - runner: ubuntu-20.04
+              - runner: ubuntu-22.04
                 sonarcloud-build-wrapper : build-wrapper-linux-x86-64
               - runner: macos-13
                 sonarcloud-build-wrapper : build-wrapper-macosx-x86
