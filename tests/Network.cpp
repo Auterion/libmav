@@ -376,15 +376,15 @@ TEST_CASE("Network runtime") {
         interface.reset();
 
         // these should not get called
-        connection->addMessageCallback(9916, [](const Message &message) {
+        connection->addMessageCallback(9916, [](const Message &/*message*/) {
             FAIL("This callback should not be called");
         }, 1, 2);
 
-        connection->addMessageCallback(9916, [](const Message &message) {
+        connection->addMessageCallback(9916, [](const Message &/*message*/) {
             FAIL("This callback should not be called");
         }, 2, 1);
 
-        connection->addMessageCallback(9917, [](const Message &message) {
+        connection->addMessageCallback(9917, [](const Message &/*message*/) {
             FAIL("This callback should not be called");
         }, 1, 1);
 
