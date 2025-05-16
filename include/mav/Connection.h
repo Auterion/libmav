@@ -69,14 +69,15 @@ namespace mav {
 
         using Callback = std::variant<FunctionCallback, PromiseCallback>;
 
-        static constexpr int CONNECTION_TIMEOUT = 3000;
+        static constexpr std::chrono::milliseconds CONNECTION_TIMEOUT = std::chrono::milliseconds(3000);
 
         // connection properties
         const MessageSet& _message_set;
         ConnectionPartner _partner;
 
         // connection state
-        uint64_t _last_received_ms = 0;
+        std::chrono::time_point<std::chrono::steady_clock> _last_received_ms = std::chrono::steady_clock::time_point(
+            std::chrono::milliseconds(0));
         bool _underlying_network_fault = false;
 
         // callbacks
@@ -101,7 +102,7 @@ namespace mav {
 
         Connection(const MessageSet &message_set, ConnectionPartner partner) :
         _message_set(message_set), _partner(partner) {
-            _last_received_ms = millis();
+            _last_received_ms = std::chrono::steady_clock::now();
         }
 
         ConnectionPartner partner() const {
@@ -110,7 +111,7 @@ namespace mav {
 
         void consumeMessageFromNetwork(const Message& message) noexcept {
             // in case we received a heartbeat, update last heartbeat time, to keep the connection alive.
-            _last_received_ms = millis();
+            _last_received_ms = std::chrono::steady_clock::now();
 
             // if we received a message, we can assume that the connection is working again.
             _underlying_network_fault = false;
@@ -189,7 +190,8 @@ namespace mav {
         }
 
         bool alive() const {
-            return !_underlying_network_fault && (millis() - _last_received_ms < CONNECTION_TIMEOUT);
+            return !_underlying_network_fault && (
+                       std::chrono::steady_clock::now() - _last_received_ms < CONNECTION_TIMEOUT);
         }
 
         CallbackHandle addMessageCallback(const std::function<void(const mav::Message&)> &on_message,
