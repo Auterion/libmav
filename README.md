@@ -94,6 +94,18 @@ message.set({
 });
 ```
 
+When a message field is an array (e.g., `float[4]`), use an appropriate `std::vector<T>` for populating such field:
+```C++
+std::vector<float> quaternion{1.f, 2.f, 3.f, 4.f};
+auto message = message_set.create("GIMBAL_DEVICE_SET_ATTITUDE");
+message["target_system"] = 1;
+message["target_component"] = 1;
+message["flags"] = 0;
+message["q"] = quaternion;
+message["angular_velocity_x"] = 0.f;
+message["angular_velocity_y"] = 0.f;
+message["angular_velocity_z"] = 0.f;
+```
 
 ### Connecting to a Network
 
@@ -161,8 +173,19 @@ runtime.onConnectionLost([](std::shared_ptr<mav::Connection> connection) {
 
 ```
 
-
 The classes will throw `mav::NetworkError` if connection fails.
+
+By default, libmav will advertise itself as a MAVLink component having system ID of `97` and component ID of `97`. If you want to change such behaviour, you can specify the desired system and component IDs with the following:
+
+```C++
+// Create a custom Identifier with the desired system and component IDs
+const mav::Identifier identifier{system_ID, component_ID};
+// Create interface for physical network
+auto physical = mav::UDPServer(14559);
+// Create a network runtime
+mav::NetworkRuntime runtime = mav::NetworkRuntime(identifier, message_set, physical);
+
+```
 
 ### Sending / receiving messages
 
