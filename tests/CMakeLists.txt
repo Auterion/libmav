@@ -6,7 +6,9 @@ add_executable(tests
         Network.cpp
         MessageFieldIterator.cpp
         UDP.cpp
-        TCP.cpp)
+        TCP.cpp
+        test_noexcept_api.cpp
+        test_binary_parsing.cpp)
 
 add_test(NAME tests COMMAND tests)
 

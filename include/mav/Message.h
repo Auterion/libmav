@@ -76,6 +76,23 @@ namespace mav {
 
     class Message {
         friend MessageSet;
+
+    public:
+        enum class SetResult {
+            SUCCESS,
+            FIELD_NOT_FOUND,
+            TYPE_MISMATCH,
+            OUT_OF_RANGE,
+            INVALID_DATA
+        };
+
+        enum class GetResult {
+            SUCCESS,
+            FIELD_NOT_FOUND,
+            TYPE_MISMATCH,
+            OUT_OF_RANGE
+        };
+
     private:
         ConnectionPartner _source_partner{};
         std::array<uint8_t, MessageDefinition::MAX_MESSAGE_SIZE> _backing_memory{};
@@ -93,9 +110,6 @@ namespace mav {
                 _message_definition(&message_definition),
                 _crc_offset(crc_offset) {}
 
-        inline bool isFinalized() const {
-            return _crc_offset >= 0;
-        }
 
         inline void _unFinalize() {
             if (_crc_offset >= 0) {
@@ -151,7 +165,8 @@ namespace mav {
                 case FieldType::BaseType::FLOAT: return static_cast<T>(deserialize<float>(b_ptr, max_size));
                 case FieldType::BaseType::DOUBLE: return static_cast<T>(deserialize<double>(b_ptr, max_size));
             }
-            throw std::runtime_error("Unknown base type"); // should never happen
+            // Return default value for unknown base type (should never happen)
+            return T{};
         }
 
         uint64_t _computeSignatureHash48(const std::array<uint8_t, MessageDefinition::KEY_SIZE>& key) const {
@@ -160,7 +175,7 @@ namespace mav {
             // secret_key
             hasher.process(key.begin(), key.begin() + MessageDefinition::KEY_SIZE);
             // header + payload + CRC
-            hasher.process(_backing_memory.begin(), _backing_memory.begin() + 
+            hasher.process(_backing_memory.begin(), _backing_memory.begin() +
                     MessageDefinition::HEADER_SIZE + header().len() + MessageDefinition::CHECKSUM_SIZE);
             // link-ID
             const uint8_t linkId = signature().linkId();
@@ -264,6 +279,17 @@ namespace mav {
             return _source_partner;
         }
 
+        Message() = default;
+
+        static inline Message fromBinary(const MessageDefinition &definition, ConnectionPartner source_partner,
+                                        int crc_offset, std::array<uint8_t, MessageDefinition::MAX_MESSAGE_SIZE> &&backing_memory) {
+            return Message{definition, source_partner, crc_offset, std::move(backing_memory)};
+        }
+
+        inline bool isFinalized() const {
+            return _crc_offset >= 0;
+        }
+
         Message& setFromNativeTypeVariant(const std::string &field_key, const NativeVariantType &v) {
             std::visit([this, &field_key](auto&& arg) {
                 this->set(field_key, arg);
@@ -353,6 +379,104 @@ namespace mav {
             return *this;
         }
 
+        // Non-throwing alternatives
+        template <typename T>
+        SetResult trySet(const std::string &field_key, const T &value, int array_index = 0) noexcept {
+            auto field_opt = _message_definition->tryGetField(field_key);
+            if (!field_opt) {
+                return SetResult::FIELD_NOT_FOUND;
+            }
+
+            const auto& field = field_opt.value();
+
+            // Validate array bounds
+            if (array_index < 0 || array_index >= field.type.size) {
+                return SetResult::OUT_OF_RANGE;
+            }
+
+            // Basic type validation for common cases
+            if constexpr(std::is_same_v<T, uint8_t>) {
+                if (field.type.base_type != FieldType::BaseType::UINT8) {
+                    return SetResult::TYPE_MISMATCH;
+                }
+            } else if constexpr(std::is_same_v<T, uint16_t>) {
+                if (field.type.base_type != FieldType::BaseType::UINT16) {
+                    return SetResult::TYPE_MISMATCH;
+                }
+            } else if constexpr(std::is_same_v<T, uint32_t>) {
+                if (field.type.base_type != FieldType::BaseType::UINT32) {
+                    return SetResult::TYPE_MISMATCH;
+                }
+            } else if constexpr(std::is_same_v<T, uint64_t>) {
+                if (field.type.base_type != FieldType::BaseType::UINT64) {
+                    return SetResult::TYPE_MISMATCH;
+                }
+            } else if constexpr(std::is_same_v<T, int8_t>) {
+                if (field.type.base_type != FieldType::BaseType::INT8) {
+                    return SetResult::TYPE_MISMATCH;
+                }
+            } else if constexpr(std::is_same_v<T, int16_t>) {
+                if (field.type.base_type != FieldType::BaseType::INT16) {
+                    return SetResult::TYPE_MISMATCH;
+                }
+            } else if constexpr(std::is_same_v<T, int32_t>) {
+                if (field.type.base_type != FieldType::BaseType::INT32) {
+                    return SetResult::TYPE_MISMATCH;
+                }
+            } else if constexpr(std::is_same_v<T, int64_t>) {
+                if (field.type.base_type != FieldType::BaseType::INT64) {
+                    return SetResult::TYPE_MISMATCH;
+                }
+            } else if constexpr(std::is_same_v<T, float>) {
+                if (field.type.base_type != FieldType::BaseType::FLOAT) {
+                    return SetResult::TYPE_MISMATCH;
+                }
+            } else if constexpr(std::is_same_v<T, double>) {
+                if (field.type.base_type != FieldType::BaseType::DOUBLE) {
+                    return SetResult::TYPE_MISMATCH;
+                }
+            } else if constexpr(std::is_same_v<T, char>) {
+                if (field.type.base_type != FieldType::BaseType::CHAR) {
+                    return SetResult::TYPE_MISMATCH;
+                }
+            }
+
+            _unFinalize();
+            _writeSingle(field, value, array_index * field.type.baseSize());
+            return SetResult::SUCCESS;
+        }
+
+        SetResult trySetString(const std::string &field_key, const std::string &value) noexcept {
+            auto field_opt = _message_definition->tryGetField(field_key);
+            if (!field_opt) {
+                return SetResult::FIELD_NOT_FOUND;
+            }
+
+            const auto& field = field_opt.value();
+
+            if (field.type.base_type != FieldType::BaseType::CHAR) {
+                return SetResult::TYPE_MISMATCH;
+            }
+
+            if (static_cast<int>(value.size()) > field.type.size) {
+                return SetResult::OUT_OF_RANGE;
+            }
+
+            _unFinalize();
+            int i = 0;
+            for (char c : value) {
+                _writeSingle(field, c, i);
+                i++;
+            }
+            // write a terminating zero only if there is still enough space
+            if (i < field.type.size) {
+                _writeSingle(field, '\0', i);
+                i++;
+            }
+
+            return SetResult::SUCCESS;
+        }
+
 
         template <typename T>
         T get(const std::string &field_key, int array_index = 0) const {
@@ -384,6 +508,94 @@ namespace mav {
                 }
                 return _readSingle<T>(field, array_index * field.type.baseSize());
             }
+        }
+
+        // Non-throwing alternatives
+        template <typename T>
+        GetResult tryGet(const std::string &field_key, T &out_value, int array_index = 0) const noexcept {
+            auto field_opt = _message_definition->tryGetField(field_key);
+            if (!field_opt) {
+                return GetResult::FIELD_NOT_FOUND;
+            }
+
+            const auto& field = field_opt.value();
+
+            // Validate array bounds
+            if (array_index < 0 || array_index >= field.type.size) {
+                return GetResult::OUT_OF_RANGE;
+            }
+
+            // Basic type validation for common cases
+            if constexpr(std::is_same_v<T, uint8_t>) {
+                if (field.type.base_type != FieldType::BaseType::UINT8) {
+                    return GetResult::TYPE_MISMATCH;
+                }
+            } else if constexpr(std::is_same_v<T, uint16_t>) {
+                if (field.type.base_type != FieldType::BaseType::UINT16) {
+                    return GetResult::TYPE_MISMATCH;
+                }
+            } else if constexpr(std::is_same_v<T, uint32_t>) {
+                if (field.type.base_type != FieldType::BaseType::UINT32) {
+                    return GetResult::TYPE_MISMATCH;
+                }
+            } else if constexpr(std::is_same_v<T, uint64_t>) {
+                if (field.type.base_type != FieldType::BaseType::UINT64) {
+                    return GetResult::TYPE_MISMATCH;
+                }
+            } else if constexpr(std::is_same_v<T, int8_t>) {
+                if (field.type.base_type != FieldType::BaseType::INT8) {
+                    return GetResult::TYPE_MISMATCH;
+                }
+            } else if constexpr(std::is_same_v<T, int16_t>) {
+                if (field.type.base_type != FieldType::BaseType::INT16) {
+                    return GetResult::TYPE_MISMATCH;
+                }
+            } else if constexpr(std::is_same_v<T, int32_t>) {
+                if (field.type.base_type != FieldType::BaseType::INT32) {
+                    return GetResult::TYPE_MISMATCH;
+                }
+            } else if constexpr(std::is_same_v<T, int64_t>) {
+                if (field.type.base_type != FieldType::BaseType::INT64) {
+                    return GetResult::TYPE_MISMATCH;
+                }
+            } else if constexpr(std::is_same_v<T, float>) {
+                if (field.type.base_type != FieldType::BaseType::FLOAT) {
+                    return GetResult::TYPE_MISMATCH;
+                }
+            } else if constexpr(std::is_same_v<T, double>) {
+                if (field.type.base_type != FieldType::BaseType::DOUBLE) {
+                    return GetResult::TYPE_MISMATCH;
+                }
+            } else if constexpr(std::is_same_v<T, char>) {
+                if (field.type.base_type != FieldType::BaseType::CHAR) {
+                    return GetResult::TYPE_MISMATCH;
+                }
+            }
+
+            out_value = _readSingle<T>(field, array_index * field.type.baseSize());
+            return GetResult::SUCCESS;
+        }
+
+        GetResult tryGetString(const std::string &field_key, std::string &out_value) const noexcept {
+            auto field_opt = _message_definition->tryGetField(field_key);
+            if (!field_opt) {
+                return GetResult::FIELD_NOT_FOUND;
+            }
+
+            const auto& field = field_opt.value();
+
+            if (field.type.base_type != FieldType::BaseType::CHAR) {
+                return GetResult::TYPE_MISMATCH;
+            }
+
+            int max_string_length = isFinalized() ?
+                    std::min(field.type.size, _crc_offset - field.offset) : field.type.size;
+            int real_string_length = strnlen(_backing_memory.data() + field.offset, max_string_length);
+
+            out_value = std::string{reinterpret_cast<const char*>(_backing_memory.data() + field.offset),
+                                   static_cast<std::string::size_type>(real_string_length)};
+
+            return GetResult::SUCCESS;
         }
 
         template <typename T>
@@ -453,7 +665,8 @@ namespace mav {
                     case FieldType::BaseType::DOUBLE: return get<std::vector<double>>(field_key);
                 }
             }
-            throw std::runtime_error("Unknown base type"); // should never happen
+            // Return default value for unknown base type (should never happen)
+            return NativeVariantType{};
         }
 
         [[nodiscard]] std::string toString() const {
@@ -529,6 +742,67 @@ namespace mav {
             _crc_offset = MessageDefinition::HEADER_SIZE + payload_size;
             serialize(crc.crc16(), _backing_memory.data() + _crc_offset);
 
+            int signature_size = 0;
+            if (sign) {
+                signature().linkId() = linkId;
+                signature().timestamp() = timestamp;
+                signature().signature() = _computeSignatureHash48(key);
+                signature_size = MessageDefinition::SIGNATURE_SIZE;
+            }
+
+            return MessageDefinition::HEADER_SIZE + payload_size + MessageDefinition::CHECKSUM_SIZE + signature_size;
+        }
+
+        // Non-throwing alternatives
+        [[nodiscard]] std::optional<uint32_t> tryFinalize(uint8_t seq, const Identifier &sender) noexcept {
+            static const std::array<uint8_t, MessageDefinition::KEY_SIZE> null_key = {};
+            return tryFinalize(seq, sender, null_key, 0, 0);
+        }
+
+        [[nodiscard]] std::optional<uint32_t> tryFinalize(uint8_t seq, const Identifier &sender,
+                                                         const std::array<uint8_t, MessageDefinition::KEY_SIZE>& key,
+                                                         const uint64_t& timestamp, const uint8_t linkId = 0) noexcept {
+            // Exception-free implementation of finalize logic
+            if (isFinalized()) {
+                _unFinalize();
+            }
+
+            bool sign = (timestamp > 0);
+
+            // Find last non-zero byte to determine payload size
+            auto last_nonzero = std::find_if(_backing_memory.rend() -
+                    MessageDefinition::HEADER_SIZE - _message_definition->maxPayloadSize(),
+                    _backing_memory.rend(), [](const auto &v) {
+                return v != 0;
+            });
+
+            int payload_size = std::max(
+                    static_cast<int>(std::distance(last_nonzero, _backing_memory.rend()))
+                            - MessageDefinition::HEADER_SIZE, 1);
+
+            // Fill header
+            header().magic() = 0xFD;
+            header().len() = static_cast<uint8_t>(payload_size);
+            header().incompatFlags() = sign ? 0x01 : 0x00;
+            header().compatFlags() = 0;
+            header().seq() = seq;
+            if (header().systemId() == 0) {
+                header().systemId() = static_cast<uint8_t>(sender.system_id);
+            }
+            if (header().componentId() == 0) {
+                header().componentId() = static_cast<uint8_t>(sender.component_id);
+            }
+            header().msgId() = _message_definition->id();
+
+            // Calculate and set CRC
+            CRC crc;
+            crc.accumulate(_backing_memory.begin() + 1, _backing_memory.begin() +
+                MessageDefinition::HEADER_SIZE + payload_size);
+            crc.accumulate(_message_definition->crcExtra());
+            _crc_offset = MessageDefinition::HEADER_SIZE + payload_size;
+            serialize(crc.crc16(), _backing_memory.data() + _crc_offset);
+
+            // Add signature if requested
             int signature_size = 0;
             if (sign) {
                 signature().linkId() = linkId;

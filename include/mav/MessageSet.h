@@ -375,6 +375,180 @@ namespace mav {
         [[nodiscard]] size_t size() const {
             return _messages.size();
         }
+
+        // Non-throwing alternatives
+        [[nodiscard]] std::optional<Message> tryCreate(const std::string &message_name) const noexcept {
+            auto message_definition = getMessageDefinition(message_name);
+            if (!message_definition) {
+                return std::nullopt;
+            }
+            return Message{message_definition.get()};
+        }
+
+        [[nodiscard]] std::optional<Message> tryCreate(int message_id) const noexcept {
+            auto message_definition = getMessageDefinition(message_id);
+            if (!message_definition) {
+                return std::nullopt;
+            }
+            return Message{message_definition.get()};
+        }
+
+        [[nodiscard]] std::optional<uint64_t> tryGetEnum(const std::string &key) const noexcept {
+            auto res = _enums.find(key);
+            if (res == _enums.end()) {
+                return std::nullopt;
+            }
+            return res->second;
+        }
+
+        // Binary parsing support
+        enum class ParseResult {
+            SUCCESS,
+            INVALID_MAGIC,
+            INVALID_CRC,
+            UNKNOWN_MESSAGE_ID,
+            BUFFER_TOO_SHORT,
+            INVALID_LENGTH
+        };
+
+        [[nodiscard]] std::optional<Message> tryParseMessage(const uint8_t* data, size_t length) const noexcept {
+            if (!data || length < MessageDefinition::HEADER_SIZE) {
+                return std::nullopt;
+            }
+
+            // Check magic byte
+            if (data[0] != 0xFD) {
+                return std::nullopt;
+            }
+
+            // Parse header
+            const Header header{data};
+            const bool message_is_signed = header.isSigned();
+            const int expected_wire_length = MessageDefinition::HEADER_SIZE + header.len() + MessageDefinition::CHECKSUM_SIZE +
+                                           (message_is_signed ? MessageDefinition::SIGNATURE_SIZE : 0);
+
+            if (static_cast<int>(length) < expected_wire_length) {
+                return std::nullopt;
+            }
+
+            // Find message definition
+            auto definition_opt = getMessageDefinition(header.msgId());
+            if (!definition_opt) {
+                return std::nullopt;
+            }
+            auto &definition = definition_opt.get();
+
+            // Validate CRC
+            const int crc_offset = MessageDefinition::HEADER_SIZE + header.len();
+            CRC crc;
+            crc.accumulate(data + 1, data + crc_offset);
+            crc.accumulate(definition.crcExtra());
+            auto crc_received = deserialize<uint16_t>(data + crc_offset, sizeof(uint16_t));
+            if (crc_received != crc.crc16()) {
+                return std::nullopt;
+            }
+
+            // Create backing memory
+            std::array<uint8_t, MessageDefinition::MAX_MESSAGE_SIZE> backing_memory{};
+            std::copy(data, data + expected_wire_length, backing_memory.data());
+
+            // Create message with default connection partner
+            ConnectionPartner source_partner{};
+            return Message::fromBinary(definition, source_partner, crc_offset, std::move(backing_memory));
+        }
+
+        [[nodiscard]] ParseResult tryParseMessage(const uint8_t* data, size_t length, Message& out_message) const noexcept {
+            if (!data || length < MessageDefinition::HEADER_SIZE) {
+                return ParseResult::BUFFER_TOO_SHORT;
+            }
+
+            // Check magic byte
+            if (data[0] != 0xFD) {
+                return ParseResult::INVALID_MAGIC;
+            }
+
+            // Parse header
+            const Header header{data};
+            const bool message_is_signed = header.isSigned();
+            const int expected_wire_length = MessageDefinition::HEADER_SIZE + header.len() + MessageDefinition::CHECKSUM_SIZE +
+                                           (message_is_signed ? MessageDefinition::SIGNATURE_SIZE : 0);
+
+            if (static_cast<int>(length) < expected_wire_length) {
+                return ParseResult::BUFFER_TOO_SHORT;
+            }
+
+            // Find message definition
+            auto definition_opt = getMessageDefinition(header.msgId());
+            if (!definition_opt) {
+                return ParseResult::UNKNOWN_MESSAGE_ID;
+            }
+            auto &definition = definition_opt.get();
+
+            // Validate CRC
+            const int crc_offset = MessageDefinition::HEADER_SIZE + header.len();
+            CRC crc;
+            crc.accumulate(data + 1, data + crc_offset);
+            crc.accumulate(definition.crcExtra());
+            auto crc_received = deserialize<uint16_t>(data + crc_offset, sizeof(uint16_t));
+            if (crc_received != crc.crc16()) {
+                return ParseResult::INVALID_CRC;
+            }
+
+            // Create backing memory
+            std::array<uint8_t, MessageDefinition::MAX_MESSAGE_SIZE> backing_memory{};
+            std::copy(data, data + expected_wire_length, backing_memory.data());
+
+            // Create message with default connection partner
+            ConnectionPartner source_partner{};
+            out_message = Message::fromBinary(definition, source_partner, crc_offset, std::move(backing_memory));
+            return ParseResult::SUCCESS;
+        }
+
+        [[nodiscard]] Message parseMessage(const uint8_t* data, size_t length) const {
+            if (!data || length < MessageDefinition::HEADER_SIZE) {
+                throw ParseError("Buffer too short for MAVLink message");
+            }
+
+            // Check magic byte
+            if (data[0] != 0xFD) {
+                throw ParseError("Invalid MAVLink magic byte");
+            }
+
+            // Parse header
+            const Header header{data};
+            const bool message_is_signed = header.isSigned();
+            const int expected_wire_length = MessageDefinition::HEADER_SIZE + header.len() + MessageDefinition::CHECKSUM_SIZE +
+                                           (message_is_signed ? MessageDefinition::SIGNATURE_SIZE : 0);
+
+            if (static_cast<int>(length) < expected_wire_length) {
+                throw ParseError("Buffer too short for complete MAVLink message");
+            }
+
+            // Find message definition
+            auto definition_opt = getMessageDefinition(header.msgId());
+            if (!definition_opt) {
+                throw ParseError(StringFormat() << "Unknown message ID: " << header.msgId() << StringFormat::end);
+            }
+            auto &definition = definition_opt.get();
+
+            // Validate CRC
+            const int crc_offset = MessageDefinition::HEADER_SIZE + header.len();
+            CRC crc;
+            crc.accumulate(data + 1, data + crc_offset);
+            crc.accumulate(definition.crcExtra());
+            auto crc_received = deserialize<uint16_t>(data + crc_offset, sizeof(uint16_t));
+            if (crc_received != crc.crc16()) {
+                throw ParseError("CRC validation failed");
+            }
+
+            // Create backing memory
+            std::array<uint8_t, MessageDefinition::MAX_MESSAGE_SIZE> backing_memory{};
+            std::copy(data, data + expected_wire_length, backing_memory.data());
+
+            // Create message with default connection partner
+            ConnectionPartner source_partner{};
+            return Message::fromBinary(definition, source_partner, crc_offset, std::move(backing_memory));
+        }
     };
 }
 

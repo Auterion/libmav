@@ -411,6 +411,15 @@ namespace mav {
             return true;
         }
 
+        // Non-throwing alternative
+        [[nodiscard]] std::optional<Field> tryGetField(const std::string &field_key) const noexcept {
+            auto it = _fields.find(field_key);
+            if (it == _fields.end()) {
+                return std::nullopt;
+            }
+            return it->second;
+        }
+
         [[nodiscard]] const std::map<std::string, Field>& fieldDefinitions() const {
             return _fields;
         }
