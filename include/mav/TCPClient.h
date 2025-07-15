@@ -42,6 +42,7 @@
 #include <unistd.h>
 #include <csignal>
 #include <netdb.h>
+#include <fcntl.h>
 #include "Network.h"
 
 namespace mav {
@@ -55,7 +56,7 @@ namespace mav {
 
     public:
 
-        TCPClient(const std::string& address, int port) {
+        TCPClient(const std::string& address, int port, int timeout_ms = 500) {
             _socket = socket(AF_INET, SOCK_STREAM, 0);
             if (_socket < 0) {
                 throw NetworkError("Could not create socket", errno);
@@ -75,10 +76,40 @@ namespace mav {
 
             _partner = {server_address.sin_addr.s_addr, server_address.sin_port, false};
 
+            // Temporarily set the socket to non-blocking mode
+            int flags = fcntl(_socket, F_GETFL, 0);
+            fcntl(_socket, F_SETFL, flags | O_NONBLOCK);
+
             if (connect(_socket, (struct sockaddr *) &server_address, sizeof(server_address)) < 0) {
-                ::close(_socket);
-                throw NetworkError("Could not connect to server", errno);
+                if (errno != EINPROGRESS) {
+                    ::close(_socket);
+                    throw NetworkError("Could not connect to server", errno);
+                }
+
+                fd_set write_fds;
+                FD_ZERO(&write_fds);
+                FD_SET(_socket, &write_fds);
+                struct timeval tv;
+                tv.tv_sec = 0;
+                tv.tv_usec = timeout_ms * 1000;
+
+                int sel = select(_socket + 1, nullptr, &write_fds, nullptr, &tv);
+                if (sel <= 0) {
+                    ::close(_socket);
+                    throw NetworkError("Connection timeout or select error");
+                }
+
+                int so_error;
+                socklen_t len = sizeof(so_error);
+                getsockopt(_socket, SOL_SOCKET, SO_ERROR, &so_error, &len);
+                if (so_error != 0) {
+                    ::close(_socket);
+                    throw NetworkError("Connect failed", so_error);
+                }
             }
+
+            // Restore original flags to make the socket blocking again
+            fcntl(_socket, F_SETFL, flags);
         }
 
         void stop() {
