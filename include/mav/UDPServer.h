@@ -49,7 +49,7 @@ namespace mav {
 
     class UDPServer : public mav::NetworkInterface {
 
-    private:
+    protected:
         static constexpr size_t RX_BUFFER_SIZE = 2048;
 
         mutable std::atomic_bool _should_terminate{false};
