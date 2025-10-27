@@ -38,6 +38,7 @@
 #include <map>
 #include <vector>
 #include <algorithm>
+#include <arpa/inet.h>
 
 #include "utils.h"
 
@@ -96,7 +97,7 @@ namespace mav {
                         ss << ".";
                     }
                 }
-                ss << ":" << port();
+                ss << ":" << ntohs(port());
                 return ss.str();
             }
         }
