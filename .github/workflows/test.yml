@@ -19,9 +19,6 @@ jobs:
       - name: Install gcovr
         run: pip3 install gcovr
 
-      - name: Setup sonar cloud
-        uses: SonarSource/sonarcloud-github-c-cpp@v2.0.2
-
       - name: Build tests
         run: cmake -B build -S .
 
