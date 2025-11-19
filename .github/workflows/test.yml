@@ -6,15 +6,12 @@ on:
 jobs:
   build-test:
     strategy:
-        fail-fast: false
-        matrix:
-            platform:
-              - runner: ubuntu-latest
-                sonarcloud-build-wrapper : build-wrapper-linux-x86-64
-              - runner: ubuntu-22.04
-                sonarcloud-build-wrapper : build-wrapper-linux-x86-64
-              - runner: macos-13
-                sonarcloud-build-wrapper : build-wrapper-macosx-x86
+      fail-fast: false
+      matrix:
+        platform:
+          - runner: ubuntu-latest
+          - runner: ubuntu-22.04
+          - runner: macos-13
     runs-on: ${{ matrix.platform.runner }}
     steps:
       - uses: actions/checkout@v3
@@ -29,19 +26,7 @@ jobs:
         run: cmake -B build -S .
 
       - name: Build tests
-        run: ${{ matrix.platform.sonarcloud-build-wrapper }} --out-dir bw-output cmake --build build
+        run: cmake --build build
 
       - name: Run tests and coverage
         run: ./build/tests/tests
-
-      - name: Generate coverage report
-        run: gcovr --exclude-throw-branches --exclude-unreachable-branches --sonarqube -o coverage.xml build
-
-      - name: Run sonar-scanner
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          SONAR_TOKEN: ${{ secrets.AUTERION_CI_SONAR_TOKEN }}
-        run: |
-          sonar-scanner \
-            --define sonar.cfamily.build-wrapper-output="bw-output" \
-            --define sonar.coverageReportPaths=coverage.xml
