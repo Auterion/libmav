@@ -70,7 +70,10 @@ namespace mav {
             struct sockaddr_in server_address{};
             server_address.sin_family = AF_INET;
             server_address.sin_port = htons(local_port);
-            server_address.sin_addr.s_addr = inet_addr(local_address.c_str());
+            if (inet_aton(local_address.c_str(), &server_address.sin_addr) == 0) {
+                server_address.sin_addr.s_addr = htonl(INADDR_ANY);
+            }
+
 
             // Parse user-provided address
             in_addr addr{};
@@ -113,8 +116,22 @@ namespace mav {
             }
 
             struct ip_mreq mreq{};
-            mreq.imr_multiaddr.s_addr = inet_addr(multicast_group.c_str());
-            mreq.imr_interface.s_addr = local_address.empty() ? INADDR_ANY : inet_addr(local_address.c_str());
+            struct in_addr group_addr{};
+            struct in_addr if_addr{};
+
+            if (inet_aton(multicast_group.c_str(), &group_addr) == 0) {
+                throw NetworkError("Invalid multicast address", errno);
+            }
+            if (!local_address.empty()) {
+                if (inet_aton(local_address.c_str(), &if_addr) == 0) {
+                    throw NetworkError("Invalid local interface address", errno);
+                }
+                mreq.imr_interface.s_addr = if_addr.s_addr;
+            } else {
+                mreq.imr_interface.s_addr = INADDR_ANY;
+            }
+            mreq.imr_multiaddr.s_addr = group_addr.s_addr;
+
             if (setsockopt(_socket, IPPROTO_IP, IP_ADD_MEMBERSHIP, &mreq, sizeof(mreq)) < 0) {
                 ::close(_socket);
                 throw NetworkError("Could not join multicast group", errno);
