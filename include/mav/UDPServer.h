@@ -70,10 +70,6 @@ namespace mav {
             struct sockaddr_in server_address{};
             server_address.sin_family = AF_INET;
             server_address.sin_port = htons(local_port);
-            if (inet_aton(local_address.c_str(), &server_address.sin_addr) == 0) {
-                server_address.sin_addr.s_addr = htonl(INADDR_ANY);
-            }
-
 
             // Parse user-provided address
             in_addr addr{};
@@ -128,7 +124,7 @@ namespace mav {
                 }
                 mreq.imr_interface.s_addr = if_addr.s_addr;
             } else {
-                mreq.imr_interface.s_addr = INADDR_ANY;
+                mreq.imr_interface.s_addr = htonl(INADDR_ANY);
             }
             mreq.imr_multiaddr.s_addr = group_addr.s_addr;
 
