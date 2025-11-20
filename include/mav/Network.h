@@ -210,7 +210,7 @@ namespace mav {
             if (!new_connection) {
                 // no existing connection, create a new one
                 new_connection = std::make_shared<Connection>(_message_set, partner);
-                new_connection->template setSendMessageToNetworkFunc([this, partner](Message &message){
+                new_connection->template setSendMessageToNetworkFunc<>([this, partner](Message &message){
                     this->_sendMessage(message, partner);
                 });
                 _connections.insert({partner, new_connection});
