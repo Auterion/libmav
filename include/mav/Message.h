@@ -39,9 +39,6 @@
 #include <array>
 #include <utility>
 #include <variant>
-
-#include <nlohmann/json.hpp>
-
 #include "MessageDefinition.h"
 #include "utils.h"
 #include "picosha2/picosha2.h"
@@ -286,38 +283,6 @@ namespace mav {
             this->set(std::move(init));
             return *this;
         }
-
-        Message& operator()(const nlohmann::json &j) {
-            for (auto it = j.begin(); it != j.end(); ++it) {
-                const std::string& key = it.key();
-                const auto& value = it.value();
-
-                if (value.is_string()) {
-                    setFromNativeTypeVariant(key, value.get<std::string>());
-                }
-                else if (value.is_number_integer()) {
-                    setFromNativeTypeVariant(key, value.get<int>());
-                }
-                else if (value.is_number_unsigned()) {
-                    setFromNativeTypeVariant(key, value.get<unsigned int>());
-                }
-                else if (value.is_number_float()) {
-                    setFromNativeTypeVariant(key, value.get<float>());
-                }
-                else if (value.is_boolean()) {
-                    setFromNativeTypeVariant(key, value.get<bool>());
-                }
-                else if (value.is_array()) {
-                    // NOTE: choose actual expected vector element type
-                    setFromNativeTypeVariant(key, value.get<std::vector<float>>());
-                }
-                else {
-                    std::cerr << "Unsupported JSON type: " << key << std::endl;
-                }
-            }
-            return *this;
-        }
-
 
         template <typename T>
         Message& set(const std::string &field_key, const T &v, int array_index = 0) {
