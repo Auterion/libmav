@@ -39,6 +39,7 @@
 #include <array>
 #include <utility>
 #include <variant>
+#include <iostream>
 
 #include <nlohmann/json.hpp>
 
