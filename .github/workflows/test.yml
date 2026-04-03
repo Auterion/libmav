@@ -1,7 +1,10 @@
 name: Tests
 
 on:
-  - push
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
 
 jobs:
   build-test:
@@ -11,19 +14,55 @@ jobs:
         platform:
           - runner: ubuntu-latest
           - runner: ubuntu-22.04
-          - runner: macos-13
+          - runner: macos-latest
     runs-on: ${{ matrix.platform.runner }}
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
-      - name: Install gcovr
-        run: pip3 install gcovr
+      - name: Install dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y nlohmann-json3-dev
 
-      - name: Build tests
+      - name: Install dependencies (macOS)
+        if: runner.os == 'macOS'
+        run: brew install nlohmann-json
+
+      - name: Configure
         run: cmake -B build -S .
 
-      - name: Build tests
+      - name: Build
         run: cmake --build build
 
-      - name: Run tests and coverage
-        run: ./build/tests/tests
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+
+  coverage:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: sudo apt-get update && sudo apt-get install -y nlohmann-json3-dev
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install gcovr
+        run: pip install gcovr
+
+      - name: Configure
+        run: cmake -B build -S .
+
+      - name: Build
+        run: cmake --build build
+
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+
+      - name: Generate coverage report
+        run: gcovr --xml-pretty -o build/coverage.xml build
+
+      - name: Coverage summary
+        run: gcovr build
