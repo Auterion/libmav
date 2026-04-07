@@ -41,7 +41,13 @@
 #include <variant>
 #include <iostream>
 
+#if __has_include(<nlohmann/json.hpp>)
 #include <nlohmann/json.hpp>
+#include <iostream>
+#define LIBMAV_HAS_NLOHMANN_JSON
+#else
+#pragma message("Warning: nlohmann/json not found. JSON support for Message will be disabled.")
+#endif
 
 #include "MessageDefinition.h"
 #include "utils.h"
@@ -288,6 +294,7 @@ namespace mav {
             return *this;
         }
 
+#ifdef LIBMAV_HAS_NLOHMANN_JSON
         Message& operator()(const nlohmann::json &j) {
             for (auto it = j.begin(); it != j.end(); ++it) {
                 const std::string& key = it.key();
@@ -318,6 +325,7 @@ namespace mav {
             }
             return *this;
         }
+#endif
 
 
         template <typename T>
