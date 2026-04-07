@@ -9,15 +9,13 @@ jobs:
       fail-fast: false
       matrix:
         platform:
-          - runner: ubuntu-latest
-          - runner: ubuntu-22.04
-          - runner: macos-13
+          - runner: macos-15
     runs-on: ${{ matrix.platform.runner }}
     steps:
       - uses: actions/checkout@v3
 
       - name: Install gcovr
-        run: pip3 install gcovr
+        run: pip3 install --break-system-packages gcovr || pip3 install gcovr
 
       - name: Build tests
         run: cmake -B build -S .
@@ -26,4 +24,50 @@ jobs:
         run: cmake --build build
 
       - name: Run tests and coverage
+        run: ./build/tests/tests
+
+  build-test-with-nlohmann-json:
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - runner: ubuntu-latest
+          - runner: ubuntu-22.04
+    runs-on: ${{ matrix.platform.runner }}
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Install nlohmann-json
+        run: sudo apt-get update && sudo apt-get install -y nlohmann-json3-dev
+
+      - name: Build tests
+        run: cmake -B build -S .
+
+      - name: Build tests
+        run: cmake --build build
+
+      - name: Run tests
+        run: ./build/tests/tests
+
+  build-test-without-nlohmann-json:
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - runner: ubuntu-latest
+          - runner: ubuntu-22.04
+    runs-on: ${{ matrix.platform.runner }}
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Ensure nlohmann-json is not installed
+        run: sudo apt-get remove -y nlohmann-json3-dev 2>/dev/null || true
+
+      - name: Build tests
+        run: cmake -B build -S .
+
+      - name: Build tests
+        run: cmake --build build
+
+      - name: Run tests
         run: ./build/tests/tests
