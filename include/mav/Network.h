@@ -263,6 +263,7 @@ namespace mav {
                     }
                 } catch (NetworkError &e) {
                     // Spread the network error to all connections
+                    std::cerr << "[libmav] expire: NetworkError (socket closed): " << e.what() << std::endl;
                     std::lock_guard<std::mutex> lock(_connections_mutex);
                     for (auto& connection : _connections) {
                         if (!_isConnectionExpired(connection.second)) {
@@ -323,6 +324,7 @@ namespace mav {
                             // connection is still declared as alive
                             if (!std::get<std::shared_ptr<Connection>>(it->second)->alive()) {
                                 // connection is dead
+                                std::cerr << "[libmav] expire: heartbeat timeout (socket may still be alive)" << std::endl;
                                 _expireConnection(it->second);
                             }
                             ++it;
