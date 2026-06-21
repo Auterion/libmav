@@ -35,14 +35,10 @@
 #ifndef LIBMAVLINK_UDPSERVER_H
 #define LIBMAVLINK_UDPSERVER_H
 
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
 #include <atomic>
-#include <unistd.h>
 #include <vector>
 #include <array>
-#include <csignal>
+#include "SocketCompat.h"
 #include "Network.h"
 
 namespace mav {
@@ -53,7 +49,7 @@ namespace mav {
         static constexpr size_t RX_BUFFER_SIZE = 2048;
 
         mutable std::atomic_bool _should_terminate{false};
-        int _socket = -1;
+        socket_handle_t _socket = INVALID_SOCKET_HANDLE;
 
         std::array<uint8_t, RX_BUFFER_SIZE> _rx_buffer;
         uint32_t _bytes_available = 0;
@@ -63,9 +59,10 @@ namespace mav {
 
     public:
         UDPServer(int local_port, const std::string& local_address="0.0.0.0") {
+            initSocketLibrary();
             _socket = socket(AF_INET, SOCK_DGRAM, 0);
-            if (_socket < 0) {
-                throw NetworkError("Could not create socket", errno);
+            if (_socket == INVALID_SOCKET_HANDLE) {
+                throw NetworkError("Could not create socket", lastSocketError());
             }
             struct sockaddr_in server_address{};
             server_address.sin_family = AF_INET;
@@ -73,7 +70,7 @@ namespace mav {
 
             // Parse user-provided address
             in_addr addr{};
-            if (inet_aton(local_address.c_str(), &addr) == 0) {
+            if (inet_aton_compat(local_address.c_str(), &addr) == 0) {
                 addr.s_addr = htonl(INADDR_ANY);
             }
             // If broadcast address given → bind to ANY
@@ -84,43 +81,43 @@ namespace mav {
 
                 // Allow reuse of address/port (multiple listeners possible)
                 int reuse = 1;
-                if (setsockopt(_socket, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse)) < 0) {
-                    ::close(_socket);
-                    throw NetworkError("Could not enable SO_REUSEADDR", errno);
+                if (setsockopt(_socket, SOL_SOCKET, SO_REUSEADDR, (const char*)&reuse, sizeof(reuse)) < 0) {
+                    closeSocket(_socket);
+                    throw NetworkError("Could not enable SO_REUSEADDR", lastSocketError());
                 }
 
                 // Enable broadcast reception/sending
                 int broadcastEnable = 1;
-                if (setsockopt(_socket, SOL_SOCKET, SO_BROADCAST, &broadcastEnable, sizeof(broadcastEnable)) < 0) {
-                    ::close(_socket);
-                    throw NetworkError("Could not enable SO_BROADCAST", errno);
+                if (setsockopt(_socket, SOL_SOCKET, SO_BROADCAST, (const char*)&broadcastEnable, sizeof(broadcastEnable)) < 0) {
+                    closeSocket(_socket);
+                    throw NetworkError("Could not enable SO_BROADCAST", lastSocketError());
                 }
             }
             server_address.sin_addr = addr;
 
             if (bind(_socket, (struct sockaddr *) &server_address, sizeof(server_address)) < 0) {
-                ::close(_socket);
-                throw NetworkError("Could not bind to socket", errno);
+                closeSocket(_socket);
+                throw NetworkError("Could not bind to socket", lastSocketError());
             }
         }
 
         void joinMulticastGroup(const std::string& multicast_group, const std::string& local_address="") const {
             int reuse = 1;
-            if (setsockopt(_socket, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse)) < 0) {
-                ::close(_socket);
-                throw NetworkError("Could not join multicast group (could not enable SO_REUSEADDR)", errno);
+            if (setsockopt(_socket, SOL_SOCKET, SO_REUSEADDR, (const char*)&reuse, sizeof(reuse)) < 0) {
+                closeSocket(_socket);
+                throw NetworkError("Could not join multicast group (could not enable SO_REUSEADDR)", lastSocketError());
             }
 
             struct ip_mreq mreq{};
             struct in_addr group_addr{};
             struct in_addr if_addr{};
 
-            if (inet_aton(multicast_group.c_str(), &group_addr) == 0) {
-                throw NetworkError("Invalid multicast address", errno);
+            if (inet_aton_compat(multicast_group.c_str(), &group_addr) == 0) {
+                throw NetworkError("Invalid multicast address", lastSocketError());
             }
             if (!local_address.empty()) {
-                if (inet_aton(local_address.c_str(), &if_addr) == 0) {
-                    throw NetworkError("Invalid local interface address", errno);
+                if (inet_aton_compat(local_address.c_str(), &if_addr) == 0) {
+                    throw NetworkError("Invalid local interface address", lastSocketError());
                 }
                 mreq.imr_interface.s_addr = if_addr.s_addr;
             } else {
@@ -128,17 +125,17 @@ namespace mav {
             }
             mreq.imr_multiaddr.s_addr = group_addr.s_addr;
 
-            if (setsockopt(_socket, IPPROTO_IP, IP_ADD_MEMBERSHIP, &mreq, sizeof(mreq)) < 0) {
-                ::close(_socket);
-                throw NetworkError("Could not join multicast group", errno);
+            if (setsockopt(_socket, IPPROTO_IP, IP_ADD_MEMBERSHIP, (const char*)&mreq, sizeof(mreq)) < 0) {
+                closeSocket(_socket);
+                throw NetworkError("Could not join multicast group", lastSocketError());
             }
         }
 
         void stop() const {
             _should_terminate.store(true);
-            if (_socket >= 0) {
-                ::shutdown(_socket, SHUT_RDWR);
-                ::close(_socket);
+            if (_socket != INVALID_SOCKET_HANDLE) {
+                ::shutdown(_socket, MAV_SHUT_RDWR);
+                closeSocket(_socket);
             }
         }
 
@@ -151,10 +148,10 @@ namespace mav {
             while (_bytes_available < size && !_should_terminate.load()) {
                 struct sockaddr_in source_address{};
                 socklen_t source_address_length = sizeof(source_address);
-                ssize_t ret = ::recvfrom(_socket, _rx_buffer.data() + _bytes_available, RX_BUFFER_SIZE - _bytes_available, 0,
+                auto ret = ::recvfrom(_socket, (char*)(_rx_buffer.data() + _bytes_available), RX_BUFFER_SIZE - _bytes_available, 0,
                                      (struct sockaddr*)&source_address, &source_address_length);
                 if (ret < 0) {
-                    throw NetworkError("Could not receive from socket", errno);
+                    throw NetworkError("Could not receive from socket", lastSocketError());
                 }
                 _bytes_available += static_cast<int>(ret);
 
@@ -186,9 +183,9 @@ namespace mav {
             server_address.sin_port = target.port();
             server_address.sin_addr.s_addr = target.address();
 
-            if (sendto(_socket, data, size, 0, (struct sockaddr *) &server_address, sizeof(server_address)) < 0) {
-                ::close(_socket);
-                throw NetworkError("Could not send to socket", errno);
+            if (sendto(_socket, (const char*)data, size, 0, (struct sockaddr *) &server_address, sizeof(server_address)) < 0) {
+                closeSocket(_socket);
+                throw NetworkError("Could not send to socket", lastSocketError());
             }
         }
 
