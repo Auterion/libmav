@@ -38,7 +38,7 @@
 #include <map>
 #include <vector>
 #include <algorithm>
-#include <arpa/inet.h>
+#include "SocketCompat.h"
 
 #include "utils.h"
 

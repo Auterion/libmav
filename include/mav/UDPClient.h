@@ -35,14 +35,10 @@
 #ifndef LIBMAVLINK_UDPCLIENT_H
 #define LIBMAVLINK_UDPCLIENT_H
 
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
 #include <atomic>
 #include <vector>
 #include <array>
-#include <csignal>
-#include <unistd.h>
+#include "SocketCompat.h"
 #include "Network.h"
 
 namespace mav {
@@ -53,7 +49,7 @@ namespace mav {
         static constexpr size_t RX_BUFFER_SIZE = 2048;
 
         mutable std::atomic_bool _should_terminate{false};
-        int _socket = -1;
+        socket_handle_t _socket = INVALID_SOCKET_HANDLE;
         struct sockaddr_in _server_address{};
 
         std::array<uint8_t, RX_BUFFER_SIZE> _rx_buffer;
@@ -62,9 +58,10 @@ namespace mav {
 
     public:
         UDPClient(const std::string &remote_address, int remote_port) {
+            initSocketLibrary();
             _socket = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
-            if (_socket < 0) {
-                throw NetworkError("Could not create socket", errno);
+            if (_socket == INVALID_SOCKET_HANDLE) {
+                throw NetworkError("Could not create socket", lastSocketError());
             }
 
             _server_address.sin_family = AF_INET;
@@ -73,7 +70,7 @@ namespace mav {
 
             // connect to server
             if(connect(_socket, (struct sockaddr *)&_server_address, sizeof(_server_address)) < 0) {
-                throw NetworkError("UDP connect call failed", errno);
+                throw NetworkError("UDP connect call failed", lastSocketError());
             }
 
             _partner = {
@@ -85,10 +82,10 @@ namespace mav {
 
         void stop() {
             _should_terminate.store(true);
-            if (_socket >= 0) {
-                ::shutdown(_socket, SHUT_RDWR);
-                ::close(_socket);
-                _socket = -1;
+            if (_socket != INVALID_SOCKET_HANDLE) {
+                ::shutdown(_socket, MAV_SHUT_RDWR);
+                closeSocket(_socket);
+                _socket = INVALID_SOCKET_HANDLE;
             }
         }
 
@@ -99,10 +96,10 @@ namespace mav {
         ConnectionPartner receive(uint8_t *destination, uint32_t size) override {
             // Receive as many messages as needed to have enough bytes available (none if already enough bytes)
             while (_bytes_available < size && !_should_terminate.load()) {
-                ssize_t ret = ::recvfrom(_socket, _rx_buffer.data() + _bytes_available, RX_BUFFER_SIZE - _bytes_available, 0,
+                auto ret = ::recvfrom(_socket, (char*)(_rx_buffer.data() + _bytes_available), RX_BUFFER_SIZE - _bytes_available, 0,
                                          (struct sockaddr *) nullptr, nullptr);
                 if (ret < 0) {
-                    throw NetworkError("Could not receive from socket", errno);
+                    throw NetworkError("Could not receive from socket", lastSocketError());
                 }
                 _bytes_available += static_cast<int>(ret);
             }
@@ -119,8 +116,8 @@ namespace mav {
 
         void send(const uint8_t *data, uint32_t size, ConnectionPartner) override {
             // no need to specify target here, as we called the udp connect function in constructor
-            if (sendto(_socket, data, size, 0, (struct sockaddr *) nullptr, 0) < 0) {
-                throw NetworkError("Could not send to socket", errno);
+            if (sendto(_socket, (const char*)data, size, 0, (struct sockaddr *) nullptr, 0) < 0) {
+                throw NetworkError("Could not send to socket", lastSocketError());
             }
         }
 
