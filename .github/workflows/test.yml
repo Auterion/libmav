@@ -12,18 +12,25 @@ jobs:
           - runner: ubuntu-latest
           - runner: ubuntu-22.04
           - runner: macos-13
+          - runner: windows-latest
     runs-on: ${{ matrix.platform.runner }}
     steps:
       - uses: actions/checkout@v3
 
       - name: Install gcovr
+        if: runner.os != 'Windows'
         run: pip3 install gcovr
 
-      - name: Build tests
+      - name: Configure
         run: cmake -B build -S .
 
       - name: Build tests
-        run: cmake --build build
+        run: cmake --build build --config Debug
 
-      - name: Run tests and coverage
+      - name: Run tests (POSIX)
+        if: runner.os != 'Windows'
         run: ./build/tests/tests
+
+      - name: Run tests (Windows)
+        if: runner.os == 'Windows'
+        run: ./build/tests/Debug/tests.exe

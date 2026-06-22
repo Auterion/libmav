@@ -34,15 +34,13 @@
 
 #ifndef LIBMAVLINK_TCPSERVER_H
 #define LIBMAVLINK_TCPSERVER_H
-#include <sys/socket.h>
-#include <sys/poll.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
 #include <atomic>
-#include <unistd.h>
-#include <csignal>
+#include <mutex>
+#include <vector>
+#include <unordered_map>
+#include <string>
+#include "SocketCompat.h"
 #include "Network.h"
-#include <sys/fcntl.h>
 
 namespace mav {
 
@@ -50,25 +48,25 @@ namespace mav {
 
     private:
         mutable std::atomic_bool _should_terminate{false};
-        int _master_socket = -1;
+        socket_handle_t _master_socket = INVALID_SOCKET_HANDLE;
         mutable std::mutex _client_sockets_mutex;
         std::vector<struct pollfd> _poll_fds;
 
-        int _current_client_socket = -1;
+        socket_handle_t _current_client_socket = INVALID_SOCKET_HANDLE;
         ConnectionPartner _current_client;
 
-        std::unordered_map<int, ConnectionPartner> _fd_to_partner;
-        std::unordered_map<ConnectionPartner, int, _ConnectionPartnerHash> _partner_to_fd;
+        std::unordered_map<socket_handle_t, ConnectionPartner> _fd_to_partner;
+        std::unordered_map<ConnectionPartner, socket_handle_t, _ConnectionPartnerHash> _partner_to_fd;
 
 
-        void _addFd(int fd, int16_t events) {
+        void _addFd(socket_handle_t fd, int16_t events) {
             struct pollfd pfd = {};
             pfd.fd = fd;
             pfd.events = events;
             _poll_fds.push_back(pfd);
         }
 
-        void _removeFd(int fd) {
+        void _removeFd(socket_handle_t fd) {
             for (auto it = _poll_fds.begin(); it != _poll_fds.end(); ++it) {
                 if (it->fd == fd) {
                     _poll_fds.erase(it);
@@ -82,45 +80,46 @@ namespace mav {
             socklen_t client_address_length = sizeof(client_address);
             auto client_socket = accept(_master_socket, (struct sockaddr *) &client_address,
                                         &client_address_length);
-            if (client_socket < 0) {
-                ::close(_master_socket);
-                throw NetworkError("Could not accept connection", errno);
+            if (client_socket == INVALID_SOCKET_HANDLE) {
+                closeSocket(_master_socket);
+                throw NetworkError("Could not accept connection", lastSocketError());
             }
             struct sockaddr_in address{};
-            int addrlen = sizeof(address);
-            getpeername(client_socket , (struct sockaddr*)&address, (socklen_t*)&addrlen);
+            socklen_t addrlen = sizeof(address);
+            getpeername(client_socket , (struct sockaddr*)&address, &addrlen);
             ConnectionPartner partner = {address.sin_addr.s_addr, address.sin_port, false};
             _fd_to_partner.insert({client_socket, partner});
             _partner_to_fd.insert({partner, client_socket});
             _addFd(client_socket, POLLIN);
         }
 
-        void _handleDisconnect(ConnectionPartner partner, int fd) {
+        void _handleDisconnect(ConnectionPartner partner, socket_handle_t fd) {
             std::lock_guard<std::mutex> lock(_client_sockets_mutex);
             _partner_to_fd.erase(partner);
             _fd_to_partner.erase(fd);
             _removeFd(fd);
-            ::close(fd);
+            closeSocket(fd);
         }
 
     public:
 
         TCPServer(int port) {
+            initSocketLibrary();
             _master_socket = socket(AF_INET, SOCK_STREAM, 0);
-            if (_master_socket < 0) {
-                throw NetworkError("Could not create socket: " + std::to_string(_master_socket));
+            if (_master_socket == INVALID_SOCKET_HANDLE) {
+                throw NetworkError("Could not create socket", lastSocketError());
             }
 
             // Mark socket as non-blocking
-            if (fcntl(_master_socket, F_SETFL, O_NONBLOCK) < 0) {
-                ::close(_master_socket);
-                throw NetworkError("Could not set socket to non-blocking", errno);
+            if (setNonBlocking(_master_socket) < 0) {
+                closeSocket(_master_socket);
+                throw NetworkError("Could not set socket to non-blocking", lastSocketError());
             }
 
             const int enable = 1;
-            if (setsockopt(_master_socket, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(int)) < 0) {
-                ::close(_master_socket);
-                throw NetworkError("Could not set socket options", errno);
+            if (setsockopt(_master_socket, SOL_SOCKET, SO_REUSEADDR, (const char*)&enable, sizeof(int)) < 0) {
+                closeSocket(_master_socket);
+                throw NetworkError("Could not set socket options", lastSocketError());
             }
             struct sockaddr_in server_address{};
             server_address.sin_family = AF_INET;
@@ -128,13 +127,13 @@ namespace mav {
             server_address.sin_addr.s_addr = htonl(INADDR_ANY);
 
             if (bind(_master_socket, (struct sockaddr *) &server_address, sizeof(server_address)) < 0) {
-                ::close(_master_socket);
-                throw NetworkError("Could not bind socket", errno);
+                closeSocket(_master_socket);
+                throw NetworkError("Could not bind socket", lastSocketError());
             }
 
             if (listen(_master_socket, 32) < 0) {
-                ::close(_master_socket);
-                throw NetworkError("Could not listen on socket", errno);
+                closeSocket(_master_socket);
+                throw NetworkError("Could not listen on socket", lastSocketError());
             }
 
             _addFd(_master_socket, POLLIN);
@@ -142,17 +141,17 @@ namespace mav {
 
         void stop() {
             _should_terminate.store(true);
-            if (_master_socket >= 0) {
+            if (_master_socket != INVALID_SOCKET_HANDLE) {
                 _removeFd(_master_socket);
-                ::shutdown(_master_socket, SHUT_RDWR);
-                ::close(_master_socket);
-                _master_socket = -1;
+                ::shutdown(_master_socket, MAV_SHUT_RDWR);
+                closeSocket(_master_socket);
+                _master_socket = INVALID_SOCKET_HANDLE;
             }
             std::lock_guard<std::mutex> lock(_client_sockets_mutex);
             for (auto client_socket : _partner_to_fd) {
                 _removeFd(client_socket.second);
-                ::shutdown(client_socket.second, SHUT_RDWR);
-                ::close(client_socket.second);
+                ::shutdown(client_socket.second, MAV_SHUT_RDWR);
+                closeSocket(client_socket.second);
             }
             _partner_to_fd.clear();
             _fd_to_partner.clear();
@@ -173,18 +172,18 @@ namespace mav {
                 }
 
                 // check for activity on one of the sockets
-                auto poll_ret = poll(_poll_fds.data(), _poll_fds.size(), 1000);
+                auto poll_ret = pollSocket(_poll_fds.data(), _poll_fds.size(), 1000);
                 if (poll_ret < 0) {
-                    if (errno == EINTR) {
+                    if (lastSocketError() == MAV_EINTR) {
                         continue;
                     } else {
                         stop();
-                        throw NetworkError("poll error", errno);
+                        throw NetworkError("poll error", lastSocketError());
                     }
                 } else if (poll_ret == 0) {
                     continue;
                 } else {
-                    int socket_to_read_from = -1;
+                    socket_handle_t socket_to_read_from = INVALID_SOCKET_HANDLE;
                     ConnectionPartner partner_to_read_from;
 
                     // iterate through the activity
@@ -214,8 +213,8 @@ namespace mav {
                     }
 
                     // do the actual read
-                    if (socket_to_read_from >= 0) {
-                        auto ret = read(socket_to_read_from, destination, size - bytes_received);
+                    if (socket_to_read_from != INVALID_SOCKET_HANDLE) {
+                        auto ret = ::recv(socket_to_read_from, (char*)destination, size - bytes_received, 0);
                         if (ret <= 0) {
                             // client disconnected
                             _handleDisconnect(partner_to_read_from, socket_to_read_from);
@@ -233,12 +232,12 @@ namespace mav {
             return _current_client;
         }
 
-        void _sendToSingleTarget(const uint8_t *data, uint32_t size, int partner_socket) {
+        void _sendToSingleTarget(const uint8_t *data, uint32_t size, socket_handle_t partner_socket) {
             uint32_t sent = 0;
             while (sent < size && !_should_terminate.load()) {
-                auto ret = write(partner_socket, data, size - sent);
+                auto ret = ::send(partner_socket, (const char*)data, size - sent, 0);
                 if (ret < 0) {
-                    throw NetworkError("Could not write to socket", errno);
+                    throw NetworkError("Could not write to socket", lastSocketError());
                 }
                 sent += ret;
             }
@@ -271,7 +270,7 @@ namespace mav {
 
         void markMessageBoundary() override {
             // release the current socket, we can again accept data from any client socket
-            _current_client_socket = -1;
+            _current_client_socket = INVALID_SOCKET_HANDLE;
         }
 
         virtual ~TCPServer() {

@@ -35,13 +35,9 @@
 #ifndef LIBMAVLINK_TCP_H
 #define LIBMAVLINK_TCP_H
 
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
 #include <atomic>
-#include <unistd.h>
-#include <csignal>
-#include <netdb.h>
+#include <string>
+#include "SocketCompat.h"
 #include "Network.h"
 
 namespace mav {
@@ -50,50 +46,52 @@ namespace mav {
 
     private:
         mutable std::atomic_bool _should_terminate{false};
-        int _socket = -1;
+        socket_handle_t _socket = INVALID_SOCKET_HANDLE;
         ConnectionPartner _partner;
 
     public:
 
         TCPClient(const std::string& address, int port, int timeout = -1) {
+            initSocketLibrary();
             _socket = socket(AF_INET, SOCK_STREAM, 0);
-            if (_socket < 0) {
-                throw NetworkError("Could not create socket", errno);
+            if (_socket == INVALID_SOCKET_HANDLE) {
+                throw NetworkError("Could not create socket", lastSocketError());
             }
 
             if (timeout > 0) {
-                struct timeval send_timeout;
-                send_timeout.tv_sec = 0;
-                send_timeout.tv_usec = timeout * 1000; // timeout is in ms
-                setsockopt(_socket, SOL_SOCKET, SO_SNDTIMEO, &send_timeout, sizeof(send_timeout));
+                setSendTimeout(_socket, timeout); // timeout is in ms
             }
 
-            struct hostent *hp;
-            hp = gethostbyname(address.c_str());
-            if (hp == nullptr) {
-                ::close(_socket);
+            // Resolve the host using getaddrinfo (portable and thread-safe).
+            struct addrinfo hints{};
+            hints.ai_family = AF_INET;
+            hints.ai_socktype = SOCK_STREAM;
+            struct addrinfo *res = nullptr;
+            if (getaddrinfo(address.c_str(), std::to_string(port).c_str(), &hints, &res) != 0 || res == nullptr) {
+                closeSocket(_socket);
                 throw NetworkError("Could not resolve host");
             }
 
             struct sockaddr_in server_address{};
-            server_address.sin_family = AF_INET;
-            server_address.sin_port = htons(port);
-            std::copy(hp->h_addr, hp->h_addr + hp->h_length, (char*)&(server_address.sin_addr.s_addr));
+            std::copy(reinterpret_cast<const char*>(res->ai_addr),
+                      reinterpret_cast<const char*>(res->ai_addr) + res->ai_addrlen,
+                      reinterpret_cast<char*>(&server_address));
+            freeaddrinfo(res);
 
             _partner = {server_address.sin_addr.s_addr, server_address.sin_port, false};
 
             if (connect(_socket, (struct sockaddr *) &server_address, sizeof(server_address)) < 0) {
-                ::close(_socket);
-                throw NetworkError("Could not connect to server", errno);
+                closeSocket(_socket);
+                throw NetworkError("Could not connect to server", lastSocketError());
             }
         }
 
         void stop() {
             _should_terminate.store(true);
-            if (_socket >= 0) {
-                ::shutdown(_socket, SHUT_RDWR);
-                ::close(_socket);
-                _socket = -1;
+            if (_socket != INVALID_SOCKET_HANDLE) {
+                ::shutdown(_socket, MAV_SHUT_RDWR);
+                closeSocket(_socket);
+                _socket = INVALID_SOCKET_HANDLE;
             }
         }
 
@@ -104,16 +102,16 @@ namespace mav {
         ConnectionPartner receive(uint8_t *destination, uint32_t size) override {
             uint32_t received = 0;
             while (received < size && !_should_terminate.load()) {
-                auto ret = read(_socket, destination, size - received);
+                auto ret = ::recv(_socket, (char*)destination, size - received, 0);
                 if (ret < 0) {
-                    ::close(_socket);
-                    throw NetworkError("Could not read from socket", errno);
+                    closeSocket(_socket);
+                    throw NetworkError("Could not read from socket", lastSocketError());
                 }
                 destination += ret;
                 received += ret;
             }
             if (_should_terminate.load()) {
-                ::close(_socket);
+                closeSocket(_socket);
                 throw NetworkInterfaceInterrupt();
             }
             return _partner;
@@ -122,16 +120,16 @@ namespace mav {
         void send(const uint8_t *data, uint32_t size, ConnectionPartner) override {
             uint32_t sent = 0;
             while (sent < size && !_should_terminate.load()) {
-                auto ret = write(_socket, data, size - sent);
+                auto ret = ::send(_socket, (const char*)data, size - sent, 0);
                 if (ret < 0) {
-                    ::close(_socket);
-                    throw NetworkError("Could not write to socket", errno);
+                    closeSocket(_socket);
+                    throw NetworkError("Could not write to socket", lastSocketError());
                 }
                 data += ret;
                 sent += ret;
             }
             if (_should_terminate.load()) {
-                ::close(_socket);
+                closeSocket(_socket);
                 throw NetworkInterfaceInterrupt();
             }
         }

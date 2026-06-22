@@ -78,16 +78,39 @@ namespace mav {
     inline int inet_aton_compat(const char* cp, struct in_addr* inp) {
         return InetPtonA(AF_INET, cp, inp) == 1 ? 1 : 0;
     }
+
+    // Put a socket into non-blocking mode. Returns 0 on success, <0 on failure
+    // (matching the POSIX fcntl contract so callers can check the sign).
+    inline int setNonBlocking(socket_handle_t s) {
+        u_long mode = 1;
+        return ioctlsocket(s, FIONBIO, &mode) == 0 ? 0 : -1;
+    }
+
+    // poll() replacement. WSAPoll has the same signature and semantics for our use.
+    inline int pollSocket(struct pollfd* fds, unsigned long nfds, int timeout_ms) {
+        return ::WSAPoll(fds, nfds, timeout_ms);
+    }
+
+    // Set the send timeout. Winsock's SO_SNDTIMEO takes a DWORD of milliseconds,
+    // not a struct timeval as on POSIX.
+    inline int setSendTimeout(socket_handle_t s, int timeout_ms) {
+        DWORD t = static_cast<DWORD>(timeout_ms);
+        return setsockopt(s, SOL_SOCKET, SO_SNDTIMEO, (const char*)&t, sizeof(t));
+    }
 }
 
 #define MAV_SHUT_RDWR SD_BOTH
 #define MAV_ECONNREFUSED WSAECONNREFUSED
+#define MAV_EINTR WSAEINTR
 
 #else // POSIX
 
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <netdb.h>
+#include <poll.h>
+#include <fcntl.h>
 #include <unistd.h>
 #include <cerrno>
 
@@ -105,10 +128,27 @@ namespace mav {
     inline int inet_aton_compat(const char* cp, struct in_addr* inp) {
         return ::inet_aton(cp, inp);
     }
+
+    // Put a socket into non-blocking mode. Returns 0 on success, <0 on failure.
+    inline int setNonBlocking(socket_handle_t s) {
+        return ::fcntl(s, F_SETFL, O_NONBLOCK);
+    }
+
+    inline int pollSocket(struct pollfd* fds, nfds_t nfds, int timeout_ms) {
+        return ::poll(fds, nfds, timeout_ms);
+    }
+
+    inline int setSendTimeout(socket_handle_t s, int timeout_ms) {
+        struct timeval tv{};
+        tv.tv_sec = timeout_ms / 1000;
+        tv.tv_usec = (timeout_ms % 1000) * 1000;
+        return setsockopt(s, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
+    }
 }
 
 #define MAV_SHUT_RDWR SHUT_RDWR
 #define MAV_ECONNREFUSED ECONNREFUSED
+#define MAV_EINTR EINTR
 
 #endif
 

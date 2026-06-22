@@ -10,7 +10,10 @@ add_executable(tests
 
 add_test(NAME tests COMMAND tests)
 
-target_compile_options(tests PRIVATE -O0 -g --coverage -Wall -Wextra -pedantic)
-target_link_options(tests PRIVATE --coverage)
+# Coverage and GCC/Clang-specific warning flags are not understood by MSVC.
+if(NOT MSVC)
+    target_compile_options(tests PRIVATE -O0 -g --coverage -Wall -Wextra -pedantic)
+    target_link_options(tests PRIVATE --coverage)
+endif()
 target_include_directories(tests PRIVATE ../include)
 target_link_libraries(tests PRIVATE Threads::Threads)
