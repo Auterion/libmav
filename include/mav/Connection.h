@@ -38,6 +38,7 @@
 #include <unordered_map>
 #include <future>
 #include <utility>
+#include <vector>
 #include "MessageSet.h"
 
 namespace mav {
@@ -109,65 +110,95 @@ namespace mav {
             return _partner;
         }
 
+        // Snapshot the registry, then run callbacks with the lock released, so a callback can take its
+        // own locks or call back into the registry without deadlocking.
         void consumeMessageFromNetwork(const Message& message) noexcept {
             // in case we received a heartbeat, update last heartbeat time, to keep the connection alive.
             _last_received_ms = std::chrono::steady_clock::now();
 
             // if we received a message, we can assume that the connection is working again.
             _underlying_network_fault = false;
+
+            std::vector<std::pair<CallbackHandle, Callback>> snapshot;
             {
                 std::scoped_lock<std::mutex> lock(_message_callback_mtx);
-                auto it = _message_callbacks.begin();
-                while (it != _message_callbacks.end()) {
-                    Callback &callback = it->second;
-                    std::visit([this, &message, &it](auto&& arg) {
-                        using T = std::decay_t<decltype(arg)>;
-                        if constexpr (std::is_same_v<T, FunctionCallback>) {
-                            if (arg.callback) {
-                                arg.callback(message);
-                            }
-                            it++;
-                        } else if constexpr (std::is_same_v<T, PromiseCallback>) {
-                            auto promise = arg.promise.lock();
-                            if (!promise) {
-                                it = _message_callbacks.erase(it);
-                            } else {
-                                if (arg.selector(message)) {
-                                    promise->set_value(message);
-                                    it = _message_callbacks.erase(it);
-                                } else {
-                                    it++;
-                                }
-                            }
-                        }
-                    }, callback);
+                snapshot.reserve(_message_callbacks.size());
+                for (const auto &entry : _message_callbacks) {
+                    snapshot.emplace_back(entry.first, entry.second);
                 }
+            }
+
+            std::vector<CallbackHandle> finished_promises;
+            std::vector<Expectation> to_fulfill;
+            for (auto &entry : snapshot) {
+                std::visit([&](auto&& arg) {
+                    using T = std::decay_t<decltype(arg)>;
+                    if constexpr (std::is_same_v<T, FunctionCallback>) {
+                        if (arg.callback) {
+                            arg.callback(message);
+                        }
+                    } else if constexpr (std::is_same_v<T, PromiseCallback>) {
+                        auto promise = arg.promise.lock();
+                        if (!promise) {
+                            finished_promises.push_back(entry.first);
+                        } else if (arg.selector(message)) {
+                            to_fulfill.push_back(std::move(promise));
+                            finished_promises.push_back(entry.first);
+                        }
+                    }
+                }, entry.second);
+            }
+
+            // erase before fulfilling, so a woken waiter never observes a stale registry
+            if (!finished_promises.empty()) {
+                std::scoped_lock<std::mutex> lock(_message_callback_mtx);
+                for (const auto handle : finished_promises) {
+                    _message_callbacks.erase(handle);
+                }
+            }
+            for (auto &promise : to_fulfill) {
+                promise->set_value(message);
             }
         }
 
         void consumeNetworkExceptionFromNetwork(const std::exception_ptr& exception) noexcept {
             _underlying_network_fault = true;
-            std::scoped_lock<std::mutex> lock(_message_callback_mtx);
-            auto it = _message_callbacks.begin();
-            while (it != _message_callbacks.end()) {
-                Callback &callback = it->second;
-                std::visit([this, &exception, &it](auto&& arg) {
+
+            std::vector<std::pair<CallbackHandle, Callback>> snapshot;
+            {
+                std::scoped_lock<std::mutex> lock(_message_callback_mtx);
+                snapshot.reserve(_message_callbacks.size());
+                for (const auto &entry : _message_callbacks) {
+                    snapshot.emplace_back(entry.first, entry.second);
+                }
+            }
+
+            std::vector<CallbackHandle> finished_promises;
+            std::vector<Expectation> to_fail;
+            for (auto &entry : snapshot) {
+                std::visit([&](auto&& arg) {
                     using T = std::decay_t<decltype(arg)>;
                     if constexpr (std::is_same_v<T, FunctionCallback>) {
                         if (arg.error_callback) {
                             arg.error_callback(exception);
                         }
-                        it++;
                     } else if constexpr (std::is_same_v<T, PromiseCallback>) {
-                        auto promise = arg.promise.lock();
-                        if (!promise) {
-                            it = _message_callbacks.erase(it);
-                        } else {
-                            promise->set_exception(exception);
-                            it = _message_callbacks.erase(it);
+                        if (auto promise = arg.promise.lock()) {
+                            to_fail.push_back(std::move(promise));
                         }
+                        finished_promises.push_back(entry.first);
                     }
-                }, callback);
+                }, entry.second);
+            }
+
+            if (!finished_promises.empty()) {
+                std::scoped_lock<std::mutex> lock(_message_callback_mtx);
+                for (const auto handle : finished_promises) {
+                    _message_callbacks.erase(handle);
+                }
+            }
+            for (auto &promise : to_fail) {
+                promise->set_exception(exception);
             }
         }
 
@@ -231,6 +262,7 @@ namespace mav {
             return addMessageCallback(_message_set.idForMessage(message_name), on_message, source_id, component_id);
         }
 
+        // A callback already in flight may run once more after this returns.
         void removeMessageCallback(CallbackHandle handle) {
             std::scoped_lock<std::mutex> lock(_message_callback_mtx);
             _message_callbacks.erase(handle);

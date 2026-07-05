@@ -409,4 +409,63 @@ TEST_CASE("Network runtime") {
         }
         connection->removeAllCallbacks();
     }
+
+    SUBCASE("Callback taking a client lock does not deadlock a concurrent registry call") {
+        interface.reset();
+
+        std::mutex client_mutex;
+        std::promise<void> callback_in_dispatch;
+        std::promise<void> callback_finished;
+
+        // callback blocks on client_mutex while it runs
+        connection->addMessageCallback([&](const Message & /*message*/) {
+            callback_in_dispatch.set_value();
+            std::scoped_lock<std::mutex> lock(client_mutex);
+            callback_finished.set_value();
+        });
+
+        // hold client_mutex, then trigger a message so the callback blocks inside dispatch
+        std::unique_lock<std::mutex> client_lock(client_mutex);
+        interface.addToReceiveQueue("\xfd\x10\x00\x00\x01\x61\x61\xbc\x26\x00\x2a\x00\x00\x00\x48\x65\x6c\x6c\x6f\x20\x57\x6f\x72\x6c\x64\x21\x53\xd9"s, interface_partner);
+        REQUIRE((callback_in_dispatch.get_future().wait_for(std::chrono::seconds(2)) != std::future_status::timeout));
+
+        // needs the registry lock; must not deadlock against the in-flight callback
+        auto expectation = connection->expect("HEARTBEAT");
+        (void) expectation;
+
+        client_lock.unlock();
+        CHECK((callback_finished.get_future().wait_for(std::chrono::seconds(2)) != std::future_status::timeout));
+
+        connection->removeAllCallbacks();
+    }
+
+    SUBCASE("Callback can register another callback from within dispatch") {
+        interface.reset();
+
+        std::atomic_bool did_register{false};
+        std::atomic_bool inner_fired{false};
+        std::promise<void> outer_ran;
+        std::promise<void> inner_ran;
+
+        connection->addMessageCallback([&](const Message & /*message*/) {
+            if (!did_register.exchange(true)) {
+                connection->addMessageCallback("TEST_MESSAGE", [&](const Message & /*m*/) {
+                    if (!inner_fired.exchange(true)) {
+                        inner_ran.set_value();
+                    }
+                });
+                outer_ran.set_value();
+            }
+        });
+
+        // first message: outer callback registers the inner one
+        interface.addToReceiveQueue("\xfd\x10\x00\x00\x01\x61\x61\xbc\x26\x00\x2a\x00\x00\x00\x48\x65\x6c\x6c\x6f\x20\x57\x6f\x72\x6c\x64\x21\x53\xd9"s, interface_partner);
+        REQUIRE((outer_ran.get_future().wait_for(std::chrono::seconds(2)) != std::future_status::timeout));
+
+        // second message: the newly-registered inner callback must fire
+        interface.addToReceiveQueue("\xfd\x10\x00\x00\x01\x61\x61\xbc\x26\x00\x2a\x00\x00\x00\x48\x65\x6c\x6c\x6f\x20\x57\x6f\x72\x6c\x64\x21\x53\xd9"s, interface_partner);
+        CHECK((inner_ran.get_future().wait_for(std::chrono::seconds(2)) != std::future_status::timeout));
+
+        connection->removeAllCallbacks();
+    }
 }
