@@ -93,7 +93,7 @@ namespace mav {
 
             size_t pos;
             try {
-                uint64_t res = std::stoul(str, &pos, base);
+                uint64_t res = std::stoull(str, &pos, base);
                 if (pos != str.size()) {
                     throw ParseError(StringFormat() << "Could not parse " << str << " as a number" << StringFormat::end);
                 }
